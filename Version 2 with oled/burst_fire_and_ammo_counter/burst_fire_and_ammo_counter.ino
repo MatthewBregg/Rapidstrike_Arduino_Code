@@ -2,7 +2,6 @@
 
  // Refactoring stuff
  // - move constants and defines into it's own headers.
- // - safety, shut off motor if motor is on, and it does not press switch regularly. 
  // - make display better
 
 #include <SPI.h>
@@ -58,15 +57,35 @@ const int flashlight_pin = A2;
  *  always set whichever one is being switched to low to low first!!!
  */ 
 
+int shots_to_fire = 0;
 /** 
  *  Turns motor on or off, enabling the break whenever the motor is off.
  *  Always use this to control the motor, as it ensures there is a delay during the switch, and only allows one to be on at a time
  *  This avoids shorts.
  */
 bool motor_enabled = false;
+long motor_enabled_at = 0;
+long cycle_last_depressed_at = 0;
+bool pusher_was_stalled = false;
+void clear_stall_safety() {
+  pusher_was_stalled = false;
+}
+const int safety_interval = 250; //How many milliseconds to let the motor run without the cycle switched being hit before shutting it off.
+void pusher_safety_shutoff() {
+  bool stalled = ((millis() - cycle_last_depressed_at) > safety_interval) && ((millis() - motor_enabled_at)  > safety_interval);
+  // Logic is : If it has been n time since the motor was enabled, and in that time, the pusher has not cycled, we have a stall.
+  // can't just do millis() - cycle_last_depressed_at > safety_interval, because if pusher is resting halfway out, then that will be negative. 
+  if ( motor_enabled && stalled ) {
+    set_motor(false); //Pusher is stalled?! Turn off motor, hopefully before it gets damaged.
+    pusher_was_stalled = true;
+    shots_to_fire = 0;
+  }
+}
 void set_motor(bool on) {
+  if ( pusher_was_stalled ) { on = false; } // If we were stalled, ensure the motor stays off until it gets cleared by a select switch, so make it like user turned off motor again. 
   if ( motor_enabled == on ) { return; } //Don't turn on / off if already on / off.
   if (on) {
+    motor_enabled_at = millis(); // This is for the safety.
     digitalWrite(nchan_motor_brake_mosfet_pin,LOW); //Disengage brake
     delayMicroseconds(100); //Wait long enough for mosfet to switch
     digitalWrite(pchan_motor_mosfet_pin,HIGH); //Turn on motor
@@ -78,6 +97,7 @@ void set_motor(bool on) {
     motor_enabled = false;
   }
 }
+
 
 BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
 BasicDebounce cycler = BasicDebounce(cycle_switch,4);
@@ -93,7 +113,6 @@ void update_buttons() {
   selector_b.update();
 }
 
-int shots_to_fire = 0;
 int shots_fired = 0;
 int burst_mode = 3; //How many shots to fire with each trigger pull.
 enum FireMode  { burst_fire = 0, full_auto = 1 };
@@ -136,6 +155,7 @@ void set_burst_fire(byte mode) {
 
 
 void selector_b_handler(BasicDebounce* button) {
+  clear_stall_safety();
   if ( fire_mode == burst_fire && burst_mode == 3) {
     set_full_auto();
   } else if (fire_mode == full_auto) {
@@ -144,6 +164,7 @@ void selector_b_handler(BasicDebounce* button) {
 }
 
 void selector_a_handler(BasicDebounce* button) {
+  clear_stall_safety();
   if ( fire_mode == burst_fire && burst_mode == 1 ) {
     set_full_auto();
   } else if (fire_mode == full_auto) {
@@ -158,6 +179,7 @@ void setup_fs_buttons() {
 
 
 void handle_pusher_retract(BasicDebounce* button) {
+  cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
   // Keep track of shots to fire and ammo count
   ++shots_fired;
   --shots_to_fire;
@@ -254,6 +276,7 @@ unsigned long last_updated_voltage_at = 0;
 
 
 void loop() {
+  pusher_safety_shutoff();
   handle_flywheels();
   update_buttons();
   digitalWrite(flashlight_pin,digitalRead(selector_switch_b));
