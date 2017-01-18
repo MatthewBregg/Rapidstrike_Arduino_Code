@@ -47,7 +47,7 @@ const int selector_switch_b = A1;
 const int flashlight_pin = A2; 
 
 BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
-BasicDebounce cycler = BasicDebounce(cycle_switch,30);
+BasicDebounce cycler = BasicDebounce(cycle_switch,4);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50);
@@ -61,6 +61,7 @@ void update_buttons() {
 }
 
 int shots_to_fire = 0;
+int shots_fired = 0;
 int burst_mode = 3; //How many shots to fire with each trigger pull.
 bool full_auto = false;
 void selector_b_handler(BasicDebounce* button) {
@@ -86,6 +87,15 @@ void selector_a_handler(BasicDebounce* button) {
 void setup_fs_buttons() {
   selector_a.set_pressed_command(&selector_a_handler);
   selector_b.set_pressed_command(&selector_b_handler);
+}
+
+
+void handle_pusher_retract(BasicDebounce* button) {
+  ++shots_fired;
+  --shots_to_fire;
+  if ( shots_to_fire <  0 ) {
+    shots_to_fire = 0;
+  }
 }
 
 void setup()   {   
@@ -143,6 +153,9 @@ void setup()   {
 
   // Set up fire_select buttons
   setup_fs_buttons();
+
+  // Set up the cycle handler
+  cycler.set_pressed_command(&handle_pusher_retract);
 }
 
 
@@ -227,26 +240,7 @@ bool handle_trigger() {
     
   return reading;
 }
-unsigned long pusher_last_change_time = 0;  // the last time the pin was toggled
-unsigned long pusher_debounce_delay = 4;    // the debounce time; increase if the output flickers
 
-//True when pusher is all the way retracted, else false.
-bool pusher_switch_status() {
-  int val = digitalRead(cycle_switch);
-  bool current_val;
-  if ( val == HIGH ) {
-    current_val = false;
-  } else {
-    current_val = true;
-  }
-  if ( (millis() - pusher_last_change_time) > pusher_debounce_delay && current_val != prev_tick_pusher_switch_status) {
-    pusher_last_change_time = millis();
-    return current_val;
-  } else { 
-      return prev_tick_pusher_switch_status;
-  }
-
-}
 
 void handle_flywheels() {
    digitalWrite(nchan_flywheel_mosfet_pin,!digitalRead(rev_switch));
@@ -254,7 +248,8 @@ void handle_flywheels() {
 
 float voltage_to_disp = 0.0;
 unsigned long last_updated_voltage_at = 0;
-int shots_fired = 0;
+
+
 
 void loop() {
   update_buttons();
@@ -267,13 +262,7 @@ void loop() {
   // Also handle turning the pusher motor on / off.
   // My logic is that whenever pusher goes from open -> closed, that means it did a rotation and fired a shot.
   // Also don't let shots_to_fire go negative.
-  bool curr_tick_pusher_switch_status = pusher_switch_status();
-  if ( curr_tick_pusher_switch_status  && !prev_tick_pusher_switch_status ) {
-      //We went from rod extended to rod closed
-      shots_to_fire = shots_to_fire - 1;
-      ++shots_fired;
-      if ( shots_to_fire < 0 ) { shots_to_fire = 0; }
-  }
+
 
   //  If we still want to fire shots, then fire.
   // If full auto and trigger pulled, then fire
@@ -286,10 +275,7 @@ void loop() {
     set_motor(false);
   }
 
-  //Update previous switch state vars
-   prev_tick_pusher_switch_status = curr_tick_pusher_switch_status;
-
-
+ if ( !motor_enabled ) {
 //Display code
   display.clearDisplay();
   display.setTextSize(1);
@@ -304,7 +290,6 @@ void loop() {
   }
 
 
-  
   //Print voltage also, only update voltage on an fixed interval to avoid flicker
   if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
     voltage_to_disp = calculate_voltage();
@@ -320,6 +305,7 @@ void loop() {
     display.print("-burst");
   }
   display.display();
+ }
   
   handle_flywheels();
   
