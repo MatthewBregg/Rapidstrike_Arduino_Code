@@ -1,5 +1,10 @@
 #include <Button_Debounce.h>
 
+ // Refactoring stuff
+ // - move constants and defines into it's own headers.
+ // - safety, shut off motor if motor is on, and it does not press switch regularly. 
+ // - make display better
+
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -29,7 +34,6 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 #endif
 // End OLED init stuff
 
-bool prev_tick_pusher_switch_status = false; 
 // During the last iteration of loop,
 // what was the status of the pusher rod switch. 
 // (The one that tells me if the arm is extended/retracted.)
@@ -92,7 +96,8 @@ void update_buttons() {
 int shots_to_fire = 0;
 int shots_fired = 0;
 int burst_mode = 3; //How many shots to fire with each trigger pull.
-bool full_auto = false; // True if full auto, else burst fire.
+enum FireMode  { burst_fire = 0, full_auto = 1 };
+FireMode fire_mode = burst_fire;
 
 void semi_auto_trigger_press_handler(BasicDebounce* button) {
   if ( shots_to_fire == 0 ) {
@@ -112,7 +117,7 @@ void full_auto_trig_release_handler(BasicDebounce* button) {
 // If true, then fire full_auto, else burst fire
 void set_full_auto() {
     burst_mode = 0;
-    full_auto = true;
+    fire_mode = full_auto;
     shots_to_fire = 0;
     set_motor(false);
     trigger.set_pressed_command(&full_auto_trig_press_handler);
@@ -121,7 +126,7 @@ void set_full_auto() {
 
 void set_burst_fire(byte mode) {
   burst_mode = mode;
-  full_auto = false;
+  fire_mode = burst_fire;
   shots_to_fire = 0;
   set_motor(false);
   trigger.set_pressed_command(&semi_auto_trigger_press_handler); 
@@ -131,17 +136,17 @@ void set_burst_fire(byte mode) {
 
 
 void selector_b_handler(BasicDebounce* button) {
-  if ( burst_mode == 3 ) {
+  if ( fire_mode == burst_fire && burst_mode == 3) {
     set_full_auto();
-  } else if (full_auto) {
+  } else if (fire_mode == full_auto) {
     set_burst_fire(1);
   } else { ++burst_mode; }
 }
 
 void selector_a_handler(BasicDebounce* button) {
-  if ( burst_mode == 1 ) {
+  if ( fire_mode == burst_fire && burst_mode == 1 ) {
     set_full_auto();
-  } else if (full_auto) {
+  } else if (fire_mode == full_auto) {
     set_burst_fire(3);
   } else { --burst_mode; }
 }
@@ -160,7 +165,7 @@ void handle_pusher_retract(BasicDebounce* button) {
     shots_to_fire = 0;
   }
   // Disable pusher if done burst firing
-  if ( shots_to_fire  == 0 && !full_auto ) {
+  if ( shots_to_fire  == 0 && fire_mode == burst_fire ) {
     set_motor(false);
   }
 }
@@ -212,10 +217,6 @@ void setup()   {
   //---------------------
    pinMode(A3, INPUT);
   //---------------------
-
-  
-  //Set the prev tick counter
-  prev_tick_pusher_switch_status = digitalRead(cycle_switch);
 
 
   // Set up fire_select buttons
@@ -281,7 +282,7 @@ void loop() {
   display.print("Voltage is ");
   display.println(voltage_to_disp);
   display.print("Fire Mode- ");
-  if ( full_auto ) {
+  if ( fire_mode == full_auto ) {
    display.println("full auto");
   } else {
     display.print(burst_mode);
