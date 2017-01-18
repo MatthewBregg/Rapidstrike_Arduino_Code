@@ -27,6 +27,8 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 #if (SSD1306_LCDHEIGHT != 64)
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
+// End OLED init stuff
+
 bool prev_tick_pusher_switch_status = false; 
 // During the last iteration of loop,
 // what was the status of the pusher rod switch. 
@@ -57,6 +59,35 @@ void update_buttons() {
   selector_a.update();
   selector_b.update();
 }
+
+int shots_to_fire = 0;
+int burst_mode = 3; //How many shots to fire with each trigger pull.
+bool full_auto = false;
+void selector_b_handler(BasicDebounce* button) {
+  if ( burst_mode == 3 ) {
+    full_auto = true;
+    burst_mode = 0;
+  } else if (full_auto) {
+    burst_mode = 1;
+    full_auto = false;
+  } else { ++burst_mode; }
+}
+
+void selector_a_handler(BasicDebounce* button) {
+    if ( burst_mode == 1 ) {
+    full_auto = true;
+    burst_mode = 0;
+  } else if (full_auto) {
+    burst_mode = 3;
+    full_auto = false;
+  } else { --burst_mode; }
+}
+
+void setup_fs_buttons() {
+  selector_a.set_pressed_command(&selector_a_handler);
+  selector_b.set_pressed_command(&selector_b_handler);
+}
+
 void setup()   {   
   //Display Set up begins 
   //--------------------------------------------------             
@@ -70,7 +101,7 @@ void setup()   {
   // Since the buffer is intialized with an Adafruit splashscreen
   // internally, this will display the splashscreen.
   display.display();
-  delay(2000); 
+  delay(100); 
   //display.setRotation(2); //rotate display
   //Display setup end
   // ----------------------------------------
@@ -110,7 +141,8 @@ void setup()   {
   prev_tick_pusher_switch_status = digitalRead(cycle_switch);
 
 
-  
+  // Set up fire_select buttons
+  setup_fs_buttons();
 }
 
 
@@ -155,54 +187,6 @@ float calculate_voltage() {
     vin=0.0;//statement to quash undesired reading !
   }
   return vin;
-}
-
-int shots_to_fire = 0;
-int burst_mode = 3; //How many shots to fire with each trigger pull.
-bool full_auto = false;
-unsigned long fs_last_change_time = 0;  // the last time the trigger was released
-unsigned long fs_debounce_delay = 50;    // the debounce time; increase if the output flickers
-bool fs_has_changed = false;
-bool last_fs_state_debounce = false;
-bool handle_fire_select_button() {
-  int val = digitalRead(selector_switch_a);
-  bool reading;
-  if ( val == LOW ) {
-      reading =  true;
-  } else { 
-      reading =  false;
-  }
-  
-  if (reading != last_fs_state_debounce) {
-    // reset the debouncing timer
-    fs_last_change_time = millis();
-  }
-
-  if ((millis() - fs_last_change_time) > fs_debounce_delay) {
-
-    // whatever the reading is at, it's been there for longer
-    // than the debounce delay, so take it as the actual current state:
-
-       if ( reading && !fs_has_changed) {
-        //take action here
-        if ( full_auto ) {
-          burst_mode = 1;
-          full_auto = false;
-        } else if ( burst_mode == 1 || burst_mode == 2 ) {
-          ++burst_mode;
-        } else if ( burst_mode == 3 ) {
-          burst_mode = 1; //This is the then full auto and then some. Whatever value this is set to,
-          // is the minimium darts fired per trig pull in FA. 
-          full_auto = true;
-        }
-        fs_has_changed = true;
-       } else if (!reading) {
-          fs_has_changed = false;
-       }
-  }
-  last_fs_state_debounce = reading;
-  return reading;
-
 }
 
 
@@ -278,7 +262,6 @@ void loop() {
   if ( millis() < 1000 ) {
     shots_fired = 0;
   }
-  bool fs_status = handle_fire_select_button();
   bool trigger_pulled = handle_trigger();
   // Handle updating the pusher status, and shots remaining to be fired
   // Also handle turning the pusher motor on / off.
@@ -303,8 +286,6 @@ void loop() {
     set_motor(false);
   }
 
-      
-  int magazine_in = digitalRead(mag_switch);
   //Update previous switch state vars
    prev_tick_pusher_switch_status = curr_tick_pusher_switch_status;
 
@@ -314,15 +295,15 @@ void loop() {
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0,0);
-
- if ( magazine_in == LOW ) {
+  if ( magazine_in.query() ) {
   display.print("shots fired ");
   display.println(shots_fired);
- } else {
+  } else {
    display.println("MAG OUT");
    shots_fired = 0;
- }
-  
+  }
+
+
   
   //Print voltage also, only update voltage on an fixed interval to avoid flicker
   if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
