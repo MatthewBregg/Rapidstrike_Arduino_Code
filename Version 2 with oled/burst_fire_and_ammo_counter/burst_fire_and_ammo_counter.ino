@@ -1,3 +1,5 @@
+#include <Button_Debounce.h>
+
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -11,12 +13,7 @@
 #define OLED_RESET 13
 Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
-/* Uncomment this block to use hardware SPI
-#define OLED_DC     6
-#define OLED_CS     7
-#define OLED_RESET  8
-Adafruit_SSD1306 display(OLED_DC, OLED_RESET, OLED_CS);
-*/
+
 
 #define NUMFLAKES 10
 #define XPOS 0
@@ -30,6 +27,10 @@ Adafruit_SSD1306 display(OLED_DC, OLED_RESET, OLED_CS);
 #if (SSD1306_LCDHEIGHT != 64)
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
+bool prev_tick_pusher_switch_status = false; 
+// During the last iteration of loop,
+// what was the status of the pusher rod switch. 
+// (The one that tells me if the arm is extended/retracted.)
 const int pchan_motor_mosfet_pin = 6;
 const int nchan_motor_brake_mosfet_pin = 3;
 const int nchan_flywheel_mosfet_pin = A5;
@@ -41,6 +42,21 @@ const int rev_switch = 8;
 const int mag_switch = A4;
 const int selector_switch_a = A0;
 const int selector_switch_b = A1;
+const int flashlight_pin = A2; 
+
+BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
+BasicDebounce cycler = BasicDebounce(cycle_switch,30);
+BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
+BasicDebounce selector_a = BasicDebounce(selector_switch_a,50);
+BasicDebounce selector_b = BasicDebounce(selector_switch_b,50);
+
+void update_buttons() {
+  trigger.update();
+  cycler.update();
+  magazine_in.update();
+  selector_a.update();
+  selector_b.update();
+}
 void setup()   {   
   //Display Set up begins 
   //--------------------------------------------------             
@@ -54,8 +70,8 @@ void setup()   {
   // Since the buffer is intialized with an Adafruit splashscreen
   // internally, this will display the splashscreen.
   display.display();
-  delay(2000);
-  display.setRotation(2); //rotate display
+  delay(2000); 
+  //display.setRotation(2); //rotate display
   //Display setup end
   // ----------------------------------------
 
@@ -81,6 +97,8 @@ void setup()   {
   pinMode(selector_switch_a, INPUT_PULLUP);
   pinMode(selector_switch_b, INPUT_PULLUP);
   //---------------------------------------
+  // Flash light
+  pinMode(flashlight_pin,OUTPUT);
 
   // Volt meter
   //---------------------
@@ -88,7 +106,15 @@ void setup()   {
   //---------------------
 
   
+  //Set the prev tick counter
+  prev_tick_pusher_switch_status = digitalRead(cycle_switch);
+
+
+  
 }
+
+
+
 
 // Motor is on when pin pchan_motor_mosfet_pin is HIGH!!!
 //Brake is on when pin nchan_motor_brake_mosfet_pin is high!!
@@ -130,31 +156,172 @@ float calculate_voltage() {
   }
   return vin;
 }
+
+int shots_to_fire = 0;
+int burst_mode = 3; //How many shots to fire with each trigger pull.
+bool full_auto = false;
+unsigned long fs_last_change_time = 0;  // the last time the trigger was released
+unsigned long fs_debounce_delay = 50;    // the debounce time; increase if the output flickers
+bool fs_has_changed = false;
+bool last_fs_state_debounce = false;
+bool handle_fire_select_button() {
+  int val = digitalRead(selector_switch_a);
+  bool reading;
+  if ( val == LOW ) {
+      reading =  true;
+  } else { 
+      reading =  false;
+  }
+  
+  if (reading != last_fs_state_debounce) {
+    // reset the debouncing timer
+    fs_last_change_time = millis();
+  }
+
+  if ((millis() - fs_last_change_time) > fs_debounce_delay) {
+
+    // whatever the reading is at, it's been there for longer
+    // than the debounce delay, so take it as the actual current state:
+
+       if ( reading && !fs_has_changed) {
+        //take action here
+        if ( full_auto ) {
+          burst_mode = 1;
+          full_auto = false;
+        } else if ( burst_mode == 1 || burst_mode == 2 ) {
+          ++burst_mode;
+        } else if ( burst_mode == 3 ) {
+          burst_mode = 1; //This is the then full auto and then some. Whatever value this is set to,
+          // is the minimium darts fired per trig pull in FA. 
+          full_auto = true;
+        }
+        fs_has_changed = true;
+       } else if (!reading) {
+          fs_has_changed = false;
+       }
+  }
+  last_fs_state_debounce = reading;
+  return reading;
+
+}
+
+
+
+
+unsigned long trigger_last_change_time = 0;  // the last time the trigger was released
+unsigned long trigger_debounce_delay = 30;    // the debounce time; increase if the output flickers
+bool has_fired = false;
+bool last_trigger_state_debounce = false;
+// True when trigger is pulled
+bool handle_trigger() {
+  int val = digitalRead(trigger_switch);
+  bool reading;
+  if ( val == LOW ) {
+      reading =  true;
+  } else { 
+      reading =  false;
+  }
+  
+  if (reading != last_trigger_state_debounce) {
+    // reset the debouncing timer
+    trigger_last_change_time = millis();
+  }
+
+  if ((millis() - trigger_last_change_time) > trigger_debounce_delay) {
+    // whatever the reading is at, it's been there for longer
+    // than the debounce delay, so take it as the actual current state:
+
+       if ( reading && shots_to_fire == 0 && !has_fired) {
+         // If we are not currently bursting, and if trigger goes from open to close, then fire shots
+         shots_to_fire = burst_mode;
+         has_fired = true;
+       } else if ( shots_to_fire == 0 && !reading) {
+          has_fired = false;
+       }
+  }
+  last_trigger_state_debounce = reading;
+    
+  return reading;
+}
+unsigned long pusher_last_change_time = 0;  // the last time the pin was toggled
+unsigned long pusher_debounce_delay = 4;    // the debounce time; increase if the output flickers
+
+//True when pusher is all the way retracted, else false.
+bool pusher_switch_status() {
+  int val = digitalRead(cycle_switch);
+  bool current_val;
+  if ( val == HIGH ) {
+    current_val = false;
+  } else {
+    current_val = true;
+  }
+  if ( (millis() - pusher_last_change_time) > pusher_debounce_delay && current_val != prev_tick_pusher_switch_status) {
+    pusher_last_change_time = millis();
+    return current_val;
+  } else { 
+      return prev_tick_pusher_switch_status;
+  }
+
+}
+
+void handle_flywheels() {
+   digitalWrite(nchan_flywheel_mosfet_pin,!digitalRead(rev_switch));
+}
+
 float voltage_to_disp = 0.0;
 unsigned long last_updated_voltage_at = 0;
-bool motor = false;
+int shots_fired = 0;
+
 void loop() {
-  // put your main code here, to run repeatedly:
+  update_buttons();
+    digitalWrite(flashlight_pin,digitalRead(selector_switch_b));
+  if ( millis() < 1000 ) {
+    shots_fired = 0;
+  }
+  bool fs_status = handle_fire_select_button();
+  bool trigger_pulled = handle_trigger();
+  // Handle updating the pusher status, and shots remaining to be fired
+  // Also handle turning the pusher motor on / off.
+  // My logic is that whenever pusher goes from open -> closed, that means it did a rotation and fired a shot.
+  // Also don't let shots_to_fire go negative.
+  bool curr_tick_pusher_switch_status = pusher_switch_status();
+  if ( curr_tick_pusher_switch_status  && !prev_tick_pusher_switch_status ) {
+      //We went from rod extended to rod closed
+      shots_to_fire = shots_to_fire - 1;
+      ++shots_fired;
+      if ( shots_to_fire < 0 ) { shots_to_fire = 0; }
+  }
+
+  //  If we still want to fire shots, then fire.
+  // If full auto and trigger pulled, then fire
+  // Hmm, either this switch, or this has weaker breaking, but I'm getting run aways. 
+  // Moving to dead center. 
+  // Otherwise don't fire.
+  if ( (shots_to_fire > 0) || ( full_auto && trigger_pulled )){
+    set_motor(true);
+  } else {
+    set_motor(false);
+  }
+
+      
+  int magazine_in = digitalRead(mag_switch);
+  //Update previous switch state vars
+   prev_tick_pusher_switch_status = curr_tick_pusher_switch_status;
+
+
+//Display code
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0,0);
-  //Print pusher status
-  display.print("Motor enabled? ");
-  display.println(motor);
-  //Print switches status
-  display.print("Rev Switch ");
-  display.println(digitalRead(rev_switch));
-  display.print("Trigger Switch ");
-  display.println(digitalRead(trigger_switch));
-  display.print("Cycle Switch ");
-  display.println(digitalRead(cycle_switch));
-  display.print("mag Switch ");
-  display.println(digitalRead(mag_switch));
-  display.print("selA Switch ");
-  display.println(digitalRead(selector_switch_a));
-  display.print("selB Switch ");
-  display.println(digitalRead(selector_switch_b));
+
+ if ( magazine_in == LOW ) {
+  display.print("shots fired ");
+  display.println(shots_fired);
+ } else {
+   display.println("MAG OUT");
+   shots_fired = 0;
+ }
   
   
   //Print voltage also, only update voltage on an fixed interval to avoid flicker
@@ -164,11 +331,16 @@ void loop() {
     }
   display.print("Voltage is ");
   display.println(voltage_to_disp);
+  display.print("Fire Mode- ");
+  if ( full_auto ) {
+   display.println("full auto");
+  } else {
+    display.print(burst_mode);
+    display.print("-burst");
+  }
   display.display();
-  //set_motor(motor);
-  delay(20);
-  //motor = !motor;
-  digitalWrite(nchan_flywheel_mosfet_pin,!digitalRead(rev_switch));
-
+  
+  handle_flywheels();
+  
 }
 
