@@ -46,6 +46,35 @@ const int selector_switch_a = A0;
 const int selector_switch_b = A1;
 const int flashlight_pin = A2; 
 
+/** 
+ *  Motor is on when pin pchan_motor_mosfet_pin is HIGH!!!
+ *  Brake is on when pin nchan_motor_brake_mosfet_pin is high!!
+ *  DO NOT ALLOW BOTH TO BE ON AT ONCE
+ *  Both can be low though, so whenever switching, 
+ *  always set whichever one is being switched to low to low first!!!
+ */ 
+
+/** 
+ *  Turns motor on or off, enabling the break whenever the motor is off.
+ *  Always use this to control the motor, as it ensures there is a delay during the switch, and only allows one to be on at a time
+ *  This avoids shorts.
+ */
+bool motor_enabled = false;
+void set_motor(bool on) {
+  if ( motor_enabled == on ) { return; } //Don't turn on / off if already on / off.
+  if (on) {
+    digitalWrite(nchan_motor_brake_mosfet_pin,LOW); //Disengage brake
+    delayMicroseconds(100); //Wait long enough for mosfet to switch
+    digitalWrite(pchan_motor_mosfet_pin,HIGH); //Turn on motor
+    motor_enabled = true;
+  } else { 
+    digitalWrite(pchan_motor_mosfet_pin,LOW); //Turn off motor
+    delayMicroseconds(100); //Wait long enough for mosfet to switch!
+    digitalWrite(nchan_motor_brake_mosfet_pin,HIGH); //Turn on brakes.
+    motor_enabled = false;
+  }
+}
+
 BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
 BasicDebounce cycler = BasicDebounce(cycle_switch,4);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
@@ -63,24 +92,57 @@ void update_buttons() {
 int shots_to_fire = 0;
 int shots_fired = 0;
 int burst_mode = 3; //How many shots to fire with each trigger pull.
-bool full_auto = false;
+bool full_auto = false; // True if full auto, else burst fire.
+
+void semi_auto_trigger_press_handler(BasicDebounce* button) {
+  if ( shots_to_fire == 0 ) {
+    shots_to_fire += burst_mode;
+    set_motor(true);
+  }
+}
+
+void full_auto_trig_press_handler(BasicDebounce* button) {
+  set_motor(true);
+}
+
+void full_auto_trig_release_handler(BasicDebounce* button) {
+  set_motor(false);
+}
+
+// If true, then fire full_auto, else burst fire
+void set_full_auto() {
+    burst_mode = 0;
+    full_auto = true;
+    shots_to_fire = 0;
+    set_motor(false);
+    trigger.set_pressed_command(&full_auto_trig_press_handler);
+    trigger.set_released_command(&full_auto_trig_release_handler); 
+}
+
+void set_burst_fire(byte mode) {
+  burst_mode = mode;
+  full_auto = false;
+  shots_to_fire = 0;
+  set_motor(false);
+  trigger.set_pressed_command(&semi_auto_trigger_press_handler); 
+  trigger.set_released_command(0);
+}
+
+
+
 void selector_b_handler(BasicDebounce* button) {
   if ( burst_mode == 3 ) {
-    full_auto = true;
-    burst_mode = 0;
+    set_full_auto();
   } else if (full_auto) {
-    burst_mode = 1;
-    full_auto = false;
+    set_burst_fire(1);
   } else { ++burst_mode; }
 }
 
 void selector_a_handler(BasicDebounce* button) {
-    if ( burst_mode == 1 ) {
-    full_auto = true;
-    burst_mode = 0;
+  if ( burst_mode == 1 ) {
+    set_full_auto();
   } else if (full_auto) {
-    burst_mode = 3;
-    full_auto = false;
+    set_burst_fire(3);
   } else { --burst_mode; }
 }
 
@@ -91,10 +153,15 @@ void setup_fs_buttons() {
 
 
 void handle_pusher_retract(BasicDebounce* button) {
+  // Keep track of shots to fire and ammo count
   ++shots_fired;
   --shots_to_fire;
   if ( shots_to_fire <  0 ) {
     shots_to_fire = 0;
+  }
+  // Disable pusher if done burst firing
+  if ( shots_to_fire  == 0 && !full_auto ) {
+    set_motor(false);
   }
 }
 
@@ -156,38 +223,12 @@ void setup()   {
 
   // Set up the cycle handler
   cycler.set_pressed_command(&handle_pusher_retract);
+
+  // Set up trigger buttons & firing mode, default to 2 shot burst.
+  set_burst_fire(2);
+  
 }
 
-
-
-
-// Motor is on when pin pchan_motor_mosfet_pin is HIGH!!!
-//Brake is on when pin nchan_motor_brake_mosfet_pin is high!!
-//DO NOT ALLOW BOTH TO BE ON AT ONCE
-//Both can be low though, so whenever switching, 
-//always set whichever one is being switched to low to low first!!!
-
-
-/** 
- *  Turns motor on or off, enabling the break whenever the motor is off.
- *  Always use this to control the motor, as it ensures there is a delay during the switch, and only allows one to be on at a time
- *  This avoids shorts.
- */
-bool motor_enabled = false;
-void set_motor(bool on) {
-  if ( motor_enabled == on ) { return; } //Don't turn on / off if already on / off.
-  if (on) {
-    digitalWrite(nchan_motor_brake_mosfet_pin,LOW); //Disengage brake
-    delayMicroseconds(100); //Wait long enough for mosfet to switch
-    digitalWrite(pchan_motor_mosfet_pin,HIGH); //Turn on motor
-    motor_enabled = true;
-  } else { 
-    digitalWrite(pchan_motor_mosfet_pin,LOW); //Turn off motor
-    delayMicroseconds(100); //Wait long enough for mosfet to switch!
-    digitalWrite(nchan_motor_brake_mosfet_pin,HIGH); //Turn on brakes.
-    motor_enabled = false;
-  }
-}
 
 float calculate_voltage() {
 //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
@@ -202,46 +243,6 @@ float calculate_voltage() {
   return vin;
 }
 
-
-
-
-unsigned long trigger_last_change_time = 0;  // the last time the trigger was released
-unsigned long trigger_debounce_delay = 30;    // the debounce time; increase if the output flickers
-bool has_fired = false;
-bool last_trigger_state_debounce = false;
-// True when trigger is pulled
-bool handle_trigger() {
-  int val = digitalRead(trigger_switch);
-  bool reading;
-  if ( val == LOW ) {
-      reading =  true;
-  } else { 
-      reading =  false;
-  }
-  
-  if (reading != last_trigger_state_debounce) {
-    // reset the debouncing timer
-    trigger_last_change_time = millis();
-  }
-
-  if ((millis() - trigger_last_change_time) > trigger_debounce_delay) {
-    // whatever the reading is at, it's been there for longer
-    // than the debounce delay, so take it as the actual current state:
-
-       if ( reading && shots_to_fire == 0 && !has_fired) {
-         // If we are not currently bursting, and if trigger goes from open to close, then fire shots
-         shots_to_fire = burst_mode;
-         has_fired = true;
-       } else if ( shots_to_fire == 0 && !reading) {
-          has_fired = false;
-       }
-  }
-  last_trigger_state_debounce = reading;
-    
-  return reading;
-}
-
-
 void handle_flywheels() {
    digitalWrite(nchan_flywheel_mosfet_pin,!digitalRead(rev_switch));
 }
@@ -252,30 +253,12 @@ unsigned long last_updated_voltage_at = 0;
 
 
 void loop() {
+  handle_flywheels();
   update_buttons();
-    digitalWrite(flashlight_pin,digitalRead(selector_switch_b));
-  if ( millis() < 1000 ) {
-    shots_fired = 0;
-  }
-  bool trigger_pulled = handle_trigger();
-  // Handle updating the pusher status, and shots remaining to be fired
-  // Also handle turning the pusher motor on / off.
-  // My logic is that whenever pusher goes from open -> closed, that means it did a rotation and fired a shot.
-  // Also don't let shots_to_fire go negative.
+  digitalWrite(flashlight_pin,digitalRead(selector_switch_b));
 
 
-  //  If we still want to fire shots, then fire.
-  // If full auto and trigger pulled, then fire
-  // Hmm, either this switch, or this has weaker breaking, but I'm getting run aways. 
-  // Moving to dead center. 
-  // Otherwise don't fire.
-  if ( (shots_to_fire > 0) || ( full_auto && trigger_pulled )){
-    set_motor(true);
-  } else {
-    set_motor(false);
-  }
-
- if ( !motor_enabled ) {
+  if ( !motor_enabled ) {
 //Display code
   display.clearDisplay();
   display.setTextSize(1);
@@ -307,7 +290,6 @@ void loop() {
   display.display();
  }
   
-  handle_flywheels();
   
 }
 
