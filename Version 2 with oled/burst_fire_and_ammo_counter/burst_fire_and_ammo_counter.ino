@@ -154,6 +154,18 @@ void set_burst_fire(byte mode) {
 
 
 
+void handle_flashlight(BasicDebounce* button) { 
+  static uint8_t flashlight_status = LOW; // Can just fully encapsulate this in function.
+  const uint16_t flashlight_hold_time = 1000; //How many MS a button must be held down to trigger the flashlight
+  // Determine if flashlight should change
+  if (button->time_in_state() > flashlight_hold_time ) {
+    if ( flashlight_status == LOW ) { flashlight_status = HIGH; }
+    else { flashlight_status = LOW; }
+  }
+  // Then write the value out.
+  digitalWrite(flashlight_pin,flashlight_status); // Set flashlight to be on/off
+}
+
 void selector_b_handler(BasicDebounce* button) {
   clear_stall_safety();
   if ( fire_mode == burst_fire && burst_mode == 3) {
@@ -175,6 +187,8 @@ void selector_a_handler(BasicDebounce* button) {
 void setup_fs_buttons() {
   selector_a.set_pressed_command(&selector_a_handler);
   selector_b.set_pressed_command(&selector_b_handler);
+  selector_a.set_released_command(&handle_flashlight);
+  selector_b.set_released_command(&handle_flashlight);
 }
 
 
@@ -279,8 +293,6 @@ void loop() {
   pusher_safety_shutoff();
   handle_flywheels();
   update_buttons();
-  digitalWrite(flashlight_pin,digitalRead(selector_switch_b));
-
 
   if ( !motor_enabled ) {
 //Display code
