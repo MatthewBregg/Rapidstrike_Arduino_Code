@@ -1,13 +1,11 @@
 #include <Button_Debounce.h>
 
- // Refactoring stuff
- // - move constants and defines into it's own headers.
- // - make display better
-
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+
+/* OLED Display preprocessor */
 
 // If using software SPI (the default case):
 #define OLED_MOSI   9
@@ -31,11 +29,9 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 #if (SSD1306_LCDHEIGHT != 64)
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
-// End OLED init stuff
+/* End Oled Display PreProcessor stuff */
 
-// During the last iteration of loop,
-// what was the status of the pusher rod switch. 
-// (The one that tells me if the arm is extended/retracted.)
+/* Pins for the controlling motors, and reading switches. */
 const int pchan_motor_mosfet_pin = 6;
 const int nchan_motor_brake_mosfet_pin = 3;
 const int nchan_flywheel_mosfet_pin = A5;
@@ -48,6 +44,7 @@ const int mag_switch = A4;
 const int selector_switch_a = A0;
 const int selector_switch_b = A1;
 const int flashlight_pin = A2; 
+/* End the section on pins */
 
 /** 
  *  Motor is on when pin pchan_motor_mosfet_pin is HIGH!!!
@@ -151,8 +148,6 @@ void set_burst_fire(byte mode) {
   trigger.set_pressed_command(&semi_auto_trigger_press_handler); 
   trigger.set_released_command(0);
 }
-
-
 
 void handle_flashlight(BasicDebounce* button) { 
   static uint8_t flashlight_status = LOW; // Can just fully encapsulate this in function.
@@ -287,44 +282,45 @@ void handle_flywheels() {
 float voltage_to_disp = 0.0;
 unsigned long last_updated_voltage_at = 0;
 
+void render_display() {
+  if ( !motor_enabled ) {
+    //Display code
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0,0);
+    if ( magazine_in.query() ) {
+      display.print("shots fired ");
+      display.println(shots_fired);
+    } else {
+      display.println("MAG OUT");
+      shots_fired = 0;
+    }
 
+    //Print voltage also, only update voltage on an fixed interval to avoid flicker
+    if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
+      voltage_to_disp = calculate_voltage();
+      last_updated_voltage_at = millis();
+    }
+    display.print("Voltage is ");
+    display.println(voltage_to_disp);
+    display.print("Fire Mode- ");
+    if ( fire_mode == full_auto ) {
+      display.println("full auto");
+    } else {
+      display.print(burst_mode);
+      display.print("-burst");
+    }
+    display.display();
+  }
+}
 
 void loop() {
   pusher_safety_shutoff();
   handle_flywheels();
   update_buttons();
 
-  if ( !motor_enabled ) {
-//Display code
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  if ( magazine_in.query() ) {
-  display.print("shots fired ");
-  display.println(shots_fired);
-  } else {
-   display.println("MAG OUT");
-   shots_fired = 0;
-  }
-
-
-  //Print voltage also, only update voltage on an fixed interval to avoid flicker
-  if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
-    voltage_to_disp = calculate_voltage();
-    last_updated_voltage_at = millis();
-    }
-  display.print("Voltage is ");
-  display.println(voltage_to_disp);
-  display.print("Fire Mode- ");
-  if ( fire_mode == full_auto ) {
-   display.println("full auto");
-  } else {
-    display.print(burst_mode);
-    display.print("-burst");
-  }
-  display.display();
- }
+  render_display();
   
   
 }
