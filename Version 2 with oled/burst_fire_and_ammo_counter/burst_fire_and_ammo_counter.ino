@@ -149,16 +149,17 @@ void set_burst_fire(byte mode) {
   trigger.set_released_command(0);
 }
 
-void handle_flashlight(BasicDebounce* button) { 
+bool handle_flashlight(BasicDebounce* button) { 
   static uint8_t flashlight_status = LOW; // Can just fully encapsulate this in function.
   const uint16_t flashlight_hold_time = 1000; //How many MS a button must be held down to trigger the flashlight
   // Determine if flashlight should change
   if (button->time_in_state() > flashlight_hold_time ) {
     if ( flashlight_status == LOW ) { flashlight_status = HIGH; }
     else { flashlight_status = LOW; }
+    digitalWrite(flashlight_pin,flashlight_status); // Set flashlight to be on/off
+    return true;
   }
-  // Then write the value out.
-  digitalWrite(flashlight_pin,flashlight_status); // Set flashlight to be on/off
+  return false;
 }
 
 void selector_b_handler(BasicDebounce* button) {
@@ -179,11 +180,20 @@ void selector_a_handler(BasicDebounce* button) {
   } else { --burst_mode; }
 }
 
+void selector_a_release_handler(BasicDebounce* button) {
+  if ( handle_flashlight(button) ) { return; }
+  selector_a_handler(button);
+}
+
+void selector_b_release_handler(BasicDebounce* button) {
+  if ( handle_flashlight(button) ) { return; }
+  selector_b_handler(button);
+}
+
 void setup_fs_buttons() {
-  selector_a.set_pressed_command(&selector_a_handler);
-  selector_b.set_pressed_command(&selector_b_handler);
-  selector_a.set_released_command(&handle_flashlight);
-  selector_b.set_released_command(&handle_flashlight);
+
+  selector_a.set_released_command(&selector_a_release_handler);
+  selector_b.set_released_command(&selector_b_release_handler);
 }
 
 
