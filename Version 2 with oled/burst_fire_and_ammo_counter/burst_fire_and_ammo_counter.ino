@@ -110,7 +110,7 @@ void update_buttons() {
   selector_b.update();
 }
 
-int shots_fired = 0;
+uint8_t shots_fired = 0;
 int burst_mode = 3; //How many shots to fire with each trigger pull.
 enum FireMode  { burst_fire = 0, full_auto = 1 };
 FireMode fire_mode = burst_fire;
@@ -225,7 +225,7 @@ void setup()   {
   // internally, this will display the splashscreen.
   display.display();
   delay(100); 
-  //display.setRotation(2); //rotate display
+  display.setRotation(2); //rotate display
   //Display setup end
   // ----------------------------------------
 
@@ -292,20 +292,31 @@ void handle_flywheels() {
 float voltage_to_disp = 0.0;
 unsigned long last_updated_voltage_at = 0;
 
+void ammo_counter() {
+    if ( !magazine_in.query()) {
+      // Can either fill the circle, draw an X, or display something like C.O. in circle. (Or graphic for mag out, but that's above me. 
+      // I like the X idea best, simple, and easy to understand meaning.
+      display.drawLine(display.width()/2-19,display.height()/2-19,display.width()/2+19, display.height()/2+19, WHITE);
+      display.drawLine(display.width()/2+19,display.height()/2-19,display.width()/2-19, display.height()/2+19, WHITE);
+      shots_fired = 0;
+    } else {
+      // Font width is 5, height is 8, * scale factor.
+      const uint8_t scale_factor = 4;
+      const uint8_t font_width = 5*scale_factor;
+      const uint8_t font_height = 8*scale_factor;
+      const char tens_place = '0'+shots_fired/10;
+      const char ones_place = '0'+shots_fired%10;
+      display.drawChar(display.width()/2-(font_width)-1, display.height()/2-(font_height/2)+2,tens_place,1,0,scale_factor); // Take the center of the screen, and shift over enough for 2 chars.
+      display.drawChar(display.width()/2+3, display.height()/2-(font_height/2)+2,ones_place,1,0,scale_factor); // Take the center of the screen, and shift over enough for 1 chars.
+    }
+     display.drawCircle(display.width()/2,display.height()/2,31, WHITE);
+}
 void render_display() {
   if ( !motor_enabled ) {
     //Display code
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0,0);
-    if ( magazine_in.query() ) {
-      display.print("shots fired ");
-      display.println(shots_fired);
-    } else {
-      display.println("MAG OUT");
-      shots_fired = 0;
-    }
+    ammo_counter();
+    /*
 
     //Print voltage also, only update voltage on an fixed interval to avoid flicker
     if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
@@ -321,6 +332,7 @@ void render_display() {
       display.print(burst_mode);
       display.print("-burst");
     }
+    */
     display.display();
   }
 }
