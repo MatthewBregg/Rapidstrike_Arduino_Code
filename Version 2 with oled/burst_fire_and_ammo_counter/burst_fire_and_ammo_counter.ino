@@ -209,6 +209,9 @@ void handle_pusher_retract(BasicDebounce* button) {
   if ( shots_to_fire  == 0 && fire_mode == burst_fire ) {
     set_motor(false);
   }
+  if ( fire_mode == full_auto && !trigger.query() ) {
+    set_motor(false); // Useful for retract on mag release function.
+  }
 }
 
 void setup()   {   
@@ -376,10 +379,16 @@ void render_display() {
   }
 }
 
+void retract_pusher_if_mag_out() {
+  if (!magazine_in.query() && !cycler.query() && !pusher_was_stalled) {
+    set_motor(true); // If mag is out, and pusher is extended, retract the motor. 
+  }
+}
 void loop() {
   pusher_safety_shutoff();
   handle_flywheels();
   update_buttons();
   render_display();
+  retract_pusher_if_mag_out();
 }
 
