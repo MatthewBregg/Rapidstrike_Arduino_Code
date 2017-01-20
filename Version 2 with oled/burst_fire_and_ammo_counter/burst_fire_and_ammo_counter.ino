@@ -345,21 +345,33 @@ void render_battery_indicator() {
   display.print(voltage_to_print%10);
   display.print('V');
 }
+
+void draw_dart(byte x, byte y) {
+  display.drawFastHLine(x,y,5,1); // Dart body
+  display.drawFastHLine(x-3,y,2,1); // Dart tail
+
+  
+}
+
+void render_firing_mode() {
+  if ( fire_mode == burst_fire ) {
+     for ( byte i = 0; i <= burst_mode; ++i ) {
+      draw_dart(2*i+3,display.height()-3*i);
+     }
+     display.drawChar(15,display.height()-3*3, '0'+burst_mode, 1, 0, 1);
+  } else { 
+    display.setCursor(2, display.height()-3*3);
+    display.setTextColor(1);
+    display.setTextSize(1);
+    display.print("AUTO");
+  }
+}
 void render_display() {
   if ( !motor_enabled ) {
-    //Display code
     display.clearDisplay();
     render_ammo_counter();
     render_battery_indicator();
-    /*
-    display.print("Fire Mode- ");
-    if ( fire_mode == full_auto ) {
-      display.println("full auto");
-    } else {
-      display.print(burst_mode);
-      display.print("-burst");
-    }
-    */
+    render_firing_mode();
     display.display();
   }
 }
@@ -368,9 +380,6 @@ void loop() {
   pusher_safety_shutoff();
   handle_flywheels();
   update_buttons();
-
   render_display();
-  
-  
 }
 
