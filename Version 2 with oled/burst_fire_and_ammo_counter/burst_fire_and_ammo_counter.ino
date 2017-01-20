@@ -292,7 +292,7 @@ void handle_flywheels() {
 float voltage_to_disp = 0.0;
 unsigned long last_updated_voltage_at = 0;
 
-void ammo_counter() {
+void render_ammo_counter() {
     if ( !magazine_in.query()) {
       // Can either fill the circle, draw an X, or display something like C.O. in circle. (Or graphic for mag out, but that's above me. 
       // I like the X idea best, simple, and easy to understand meaning.
@@ -311,20 +311,47 @@ void ammo_counter() {
     }
      display.drawCircle(display.width()/2,display.height()/2,31, WHITE);
 }
+
+
+void render_battery_indicator() {
+  const float battery_min_voltage = 7.0;
+  const float battery_full_voltage = 8.4;
+  static int battery_percentage = 0;
+  static byte voltage_to_print = 0; // Doing this to avoid float operations every single display update when printing, probably not needed though.
+  // First handle updating voltage reading if enough time has passed!
+    if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
+      voltage_to_disp = calculate_voltage();
+      voltage_to_print = voltage_to_disp*10;
+      last_updated_voltage_at = millis();
+      // Max voltage will be considered to be 8.4, and min will be 7.0 (limit of regulator, and close limit of safe lipo usage.) If using this code with a different battery, 
+      // change these constants if you want an accurate battery meter!!
+      // Could probably avoid float altogther if really wanted.
+      battery_percentage = 20*((voltage_to_disp-battery_min_voltage)/(battery_full_voltage-battery_min_voltage));
+      if ( battery_percentage > 20 ) { battery_percentage = 20; }
+      if ( battery_percentage < 0 ) { battery_percentage = 0; }
+    }
+
+  // hard code in a battery icon.
+  display.drawRect(7,3,3,2,1);
+  display.drawRect(3,5,11,20,1);
+  display.fillRect(3,5,11,20-battery_percentage,1);
+  
+  // Now add a voltage display.
+  display.setCursor(17, 2);
+  display.setTextColor(1);
+  display.setTextSize(1);
+  display.print(voltage_to_print/10);
+  display.print('.');
+  display.print(voltage_to_print%10);
+  display.print('V');
+}
 void render_display() {
   if ( !motor_enabled ) {
     //Display code
     display.clearDisplay();
-    ammo_counter();
+    render_ammo_counter();
+    render_battery_indicator();
     /*
-
-    //Print voltage also, only update voltage on an fixed interval to avoid flicker
-    if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
-      voltage_to_disp = calculate_voltage();
-      last_updated_voltage_at = millis();
-    }
-    display.print("Voltage is ");
-    display.println(voltage_to_disp);
     display.print("Fire Mode- ");
     if ( fire_mode == full_auto ) {
       display.println("full auto");
