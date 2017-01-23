@@ -149,9 +149,20 @@ void set_burst_fire(byte mode) {
   trigger.set_released_command(0);
 }
 
+bool stealth_status = false;
+bool handle_stealth_mode(BasicDebounce* button) {
+  const uint16_t hold_time = 3000; //How many MS a button must be held down to trigger the flashlight
+  // Determine if stealth mode should changee
+  if (button->time_in_state() > hold_time ) {
+    stealth_status = !stealth_status;
+    return true;
+  }
+  return false;
+}
+
 bool handle_flashlight(BasicDebounce* button) { 
   static uint8_t flashlight_status = LOW; // Can just fully encapsulate this in function.
-  const uint16_t flashlight_hold_time = 1000; //How many MS a button must be held down to trigger the flashlight
+  const uint16_t flashlight_hold_time = 750; //How many MS a button must be held down to trigger the flashlight
   // Determine if flashlight should change
   if (button->time_in_state() > flashlight_hold_time ) {
     if ( flashlight_status == LOW ) { flashlight_status = HIGH; }
@@ -181,11 +192,13 @@ void selector_a_handler(BasicDebounce* button) {
 }
 
 void selector_a_release_handler(BasicDebounce* button) {
+  if ( handle_stealth_mode(button) ) { return; }
   if ( handle_flashlight(button) ) { return; }
   selector_a_handler(button);
 }
 
 void selector_b_release_handler(BasicDebounce* button) {
+  if ( handle_stealth_mode(button) ) { return; }
   if ( handle_flashlight(button) ) { return; }
   selector_b_handler(button);
 }
@@ -370,6 +383,11 @@ void render_firing_mode() {
   }
 }
 void render_display() {
+  if ( stealth_status ) {
+    display.clearDisplay();
+    display.display();
+    return;
+  }
   if ( !motor_enabled ) {
     display.clearDisplay();
     render_ammo_counter();
