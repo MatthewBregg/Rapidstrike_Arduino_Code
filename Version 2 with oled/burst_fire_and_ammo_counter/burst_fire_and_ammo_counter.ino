@@ -127,6 +127,11 @@ void full_auto_trig_press_handler(BasicDebounce* button) {
 }
 
 void full_auto_trig_release_handler(BasicDebounce* button) {
+  // Remove the following line and make this function do nothing to change to live fire.
+  // Next time I update the pistol, will probably do so, I wanted to try dead center as I was getting the occasional overrun, 
+  // but I don't think the lack of cycle is worth it.
+  // Perhaps a good compromise would be, if trigger is released, keep motor on until cycle control is hit, but then don't turn
+  // if back on if it overruns. 
   set_motor(false);
 }
 
