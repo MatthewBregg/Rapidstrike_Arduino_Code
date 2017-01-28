@@ -97,7 +97,11 @@ void set_motor(bool on) {
 
 
 BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
-BasicDebounce cycler = BasicDebounce(cycle_switch,4);
+// Idea, perhaps have cycler, and ammo cycler objects.
+// cycler would have a very low debounce delay, 
+// and be used for fire control where bouncing might have to happen for good cycle control.
+// Ammo cycler can have a high debounce, and be used for ammo counting.
+BasicDebounce cycler = BasicDebounce(cycle_switch,14);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50);
@@ -109,6 +113,8 @@ void update_buttons() {
   selector_a.update();
   selector_b.update();
 }
+
+void render_display(bool force_render);
 
 uint8_t shots_fired = 0;
 int burst_mode = 3; //How many shots to fire with each trigger pull.
@@ -127,12 +133,10 @@ void full_auto_trig_press_handler(BasicDebounce* button) {
 }
 
 void full_auto_trig_release_handler(BasicDebounce* button) {
-  // Remove the following line and make this function do nothing to change to live fire.
-  // Next time I update the pistol, will probably do so, I wanted to try dead center as I was getting the occasional overrun, 
-  // but I don't think the lack of cycle is worth it.
+  // Change the following line to switch between live/dead center.  Commented out is live, in for dead.
   // Perhaps a good compromise would be, if trigger is released, keep motor on until cycle control is hit, but then don't turn
   // if back on if it overruns. 
-  set_motor(false);
+  // set_motor(false); 
 }
 
 // If true, then fire full_auto, else burst fire
@@ -185,6 +189,7 @@ void selector_b_handler(BasicDebounce* button) {
   } else if (fire_mode == full_auto) {
     set_burst_fire(1);
   } else { ++burst_mode; }
+  render_display(true);
 }
 
 void selector_a_handler(BasicDebounce* button) {
@@ -194,6 +199,7 @@ void selector_a_handler(BasicDebounce* button) {
   } else if (fire_mode == full_auto) {
     set_burst_fire(3);
   } else { --burst_mode; }
+  render_display(true);
 }
 
 void selector_a_release_handler(BasicDebounce* button) {
@@ -215,6 +221,7 @@ void setup_fs_buttons() {
 }
 
 
+
 void handle_pusher_retract(BasicDebounce* button) {
   cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
   // Keep track of shots to fire and ammo count
@@ -230,6 +237,7 @@ void handle_pusher_retract(BasicDebounce* button) {
   if ( fire_mode == full_auto && !trigger.query() ) {
     set_motor(false); // Useful for retract on mag release function.
   }
+  render_display(true); // Pusher just left, safe to do a render
 }
 
 void setup()   {   
@@ -387,13 +395,13 @@ void render_firing_mode() {
     display.print("AUTO");
   }
 }
-void render_display() {
+void render_display(bool force_render = false) {
   if ( stealth_status ) {
     display.clearDisplay();
     display.display();
     return;
   }
-  if ( !motor_enabled ) {
+  if ( !motor_enabled || force_render) {
     display.clearDisplay();
     render_ammo_counter();
     render_battery_indicator();
