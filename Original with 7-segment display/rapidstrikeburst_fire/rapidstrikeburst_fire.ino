@@ -55,10 +55,16 @@ void setup() {
  *  Always use this to control the motor, as it ensures there is a delay during the switch, and only allows one to be on at a time
  *  This avoids shorts.
  */
+bool safety_cut_off = false;
+long motor_enabled_time = 0;
 bool motor_enabled = false;
 void set_motor(bool on) {
+  if ( safety_cut_off ) {
+    on = false; //Keep the motor off!
+  }
   if ( motor_enabled == on ) { return; } //Don't turn on / off if already on / off.
   if (on) {
+    motor_enabled_time = millis();
     digitalWrite(4,LOW); //Disengage brake
     delayMicroseconds(100); //Wait long enough for mosfet to switch
     digitalWrite(6,HIGH); //Turn on motor
@@ -98,6 +104,7 @@ bool handle_fire_select_button() {
 
        if ( reading && !fs_has_changed) {
         //take action here
+        safety_cut_off = false; // Reset the safety!
         if ( full_auto ) {
           burst_mode = 1;
           full_auto = false;
@@ -180,6 +187,9 @@ int shots_fired = 0;
 long last_updated_counter_meter_disp = 0;
 long update_counter_meter_interval = 200;
 long led_reset_counter = 0;
+
+long cycle_switch_last_hit_time = 0;
+long safety_cut_off_time = 200;
 void loop() {
   if ( full_auto ) {
     // Set the fire_mode display
@@ -196,6 +206,15 @@ void loop() {
   // My logic is that whenever pusher goes from open -> closed, that means it did a rotation and fired a shot.
   // Also don't let shots_to_fire go negative.
   bool curr_tick_pusher_switch_status = pusher_switch_status();
+  if ( curr_tick_pusher_switch_status ) {
+    cycle_switch_last_hit_time = millis();
+  }
+  // Now handle the safety/stalled pusher check
+  if ( motor_enabled && (millis() - cycle_switch_last_hit_time) > safety_cut_off_time && ( millis() - motor_enabled_time ) > safety_cut_off_time ) {
+    shots_to_fire = 0;
+    safety_cut_off = true;
+    set_motor(false);
+  }
   if ( curr_tick_pusher_switch_status  && !prev_tick_pusher_switch_status ) {
       //We went from rod extended to rod closed
       shots_to_fire = shots_to_fire - 1;
