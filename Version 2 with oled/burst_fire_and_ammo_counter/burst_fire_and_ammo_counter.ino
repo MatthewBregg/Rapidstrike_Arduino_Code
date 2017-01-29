@@ -101,7 +101,7 @@ BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
 // cycler would have a very low debounce delay, 
 // and be used for fire control where bouncing might have to happen for good cycle control.
 // Ammo cycler can have a high debounce, and be used for ammo counting.
-BasicDebounce cycler = BasicDebounce(cycle_switch,14);
+BasicDebounce cycler = BasicDebounce(cycle_switch,15);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50);
@@ -223,7 +223,6 @@ void setup_fs_buttons() {
 
 
 void handle_pusher_retract(BasicDebounce* button) {
-  cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
   // Keep track of shots to fire and ammo count
   ++shots_fired;
   --shots_to_fire;
@@ -237,6 +236,7 @@ void handle_pusher_retract(BasicDebounce* button) {
   if ( fire_mode == full_auto && !trigger.query() ) {
     set_motor(false); // Useful for retract on mag release function.
   }
+  cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
   render_display(true); // Pusher just left, safe to do a render
 }
 
@@ -373,6 +373,9 @@ void render_battery_indicator() {
   display.print('.');
   display.print(voltage_to_print%10);
   display.print('V');
+  if ( pusher_was_stalled ) {
+    display.print('S');
+  }
 }
 
 void draw_dart(byte x, byte y) {
@@ -397,8 +400,10 @@ void render_firing_mode() {
 }
 void render_display(bool force_render = false) {
   if ( stealth_status ) {
-    display.clearDisplay();
-    display.display();
+    if ( !motor_enabled ) {
+      display.clearDisplay();
+      display.display();
+    }
     return;
   }
   if ( !motor_enabled || force_render) {
