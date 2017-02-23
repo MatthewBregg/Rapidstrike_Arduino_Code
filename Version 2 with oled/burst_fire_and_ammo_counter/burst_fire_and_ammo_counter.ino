@@ -73,13 +73,20 @@ void pusher_safety_shutoff() {
   // Logic is : If it has been n time since the motor was enabled, and in that time, the pusher has not cycled, we have a stall.
   // can't just do millis() - cycle_last_depressed_at > safety_interval, because if pusher is resting halfway out, then that will be negative. 
   if ( motor_enabled && stalled ) {
-    set_motor(false); //Pusher is stalled?! Turn off motor, hopefully before it gets damaged.
+    //Pusher is stalled?! Turn off motor, hopefully before it gets damaged.
     pusher_was_stalled = true;
+    set_motor(false);
     shots_to_fire = 0;
   }
 }
 void set_motor(bool on) {
-  if ( pusher_was_stalled ) { on = false; } // If we were stalled, ensure the motor stays off until it gets cleared by a select switch, so make it like user turned off motor again. 
+  if ( pusher_was_stalled ) {
+    // If we were stalled, turn off everything.
+    digitalWrite(pchan_motor_mosfet_pin,LOW); //Turn off motor
+    digitalWrite(nchan_motor_brake_mosfet_pin,LOW); //Turn off brakes
+    motor_enabled = false;
+    return; 
+  } // If we were stalled, ensure the motor stays off until it gets cleared by a select switch, so make it like user turned off motor again. 
   if ( motor_enabled == on ) { return; } //Don't turn on / off if already on / off.
   if (on) {
     motor_enabled_at = millis(); // This is for the safety.
@@ -122,9 +129,12 @@ enum FireMode  { burst_fire = 0, full_auto = 1 };
 FireMode fire_mode = burst_fire;
 
 void semi_auto_trigger_press_handler(BasicDebounce* button) {
-  if ( shots_to_fire == 0 ) {
-    shots_to_fire += burst_mode;
-    set_motor(true);
+  // Interruptable bursts, pulling the trigger again will restart the burst!
+  // Also do N on the queue logic, essentially, allowing stacking up to N bursts from pulling the trigger. Going to start with one. 
+  const int max_stack = (4-burst_mode)*burst_mode;
+  if ( shots_to_fire < max_stack) { // Update this line if adding bigger bursts.
+     shots_to_fire = min(shots_to_fire+burst_mode,max_stack);
+     set_motor(true);
   }
 }
 
