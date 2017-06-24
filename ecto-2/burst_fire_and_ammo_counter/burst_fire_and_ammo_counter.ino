@@ -43,6 +43,9 @@ const int mag_switch = 4;
 const int selector_switch_a = 0;
 const int selector_switch_b = 0;
 const int flashlight_pin = 0; 
+const int touch_sensor_pin = 3; // NOTE : THIS IS TOUCHED WHEN HIGH (active_high)
+const int fx_pin = A5;
+const int voltge_pin = 0
 /* End the section on pins */
 
 /** 
@@ -107,6 +110,7 @@ BasicDebounce cycler = BasicDebounce(cycle_switch,13, HIGH);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50);
+BasicDebounce touch_sensor = BasicDebounce(touch_sensor_pin,30, HIGH);
 
 void update_buttons() {
   trigger.update();
@@ -114,6 +118,7 @@ void update_buttons() {
   magazine_in.update();
   selector_a.update();
   selector_b.update();
+  touch_sensor.update();
 }
 
 void render_display(bool force_render);
@@ -136,6 +141,7 @@ void semi_auto_trigger_press_handler(BasicDebounce* button) {
 void full_auto_trig_press_handler(BasicDebounce* button) {
   set_motor(true);
 }
+
 
 void full_auto_trig_release_handler(BasicDebounce* button) {
   // Change the following line to switch between live/dead center.  Commented out is live, in for dead.
@@ -281,33 +287,39 @@ void setup()   {
   pinMode(mag_switch, INPUT_PULLUP);
   pinMode(selector_switch_a, INPUT_PULLUP);
   pinMode(selector_switch_b, INPUT_PULLUP);
+  pinMode(touch_sensor_pin,INPUT_PULLUP);
   //---------------------------------------
   // Flash light
   pinMode(flashlight_pin,OUTPUT);
 
   // Volt meter
   //---------------------
-   pinMode(A3, INPUT);
+   pinMode(voltage_pin, INPUT);
   //---------------------
+
+  // FX
+  //---------------------
+  pinMode(fx_pin,OUTPUT);
+  //-------------------
 
 
   // Set up fire_select buttons
   setup_fs_buttons();
 
   // Set up the cycle handler
-  cycler.set_pressed_command(&handle_pusher_retract);
+  cycler.set_released_command(&handle_pusher_retract);
 
   // Set up trigger buttons & firing mode, default to 2 shot burst.
   set_burst_fire(2);
   
 }
 
-
+;
 float calculate_voltage() {
 //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
   const float R1 = 75000.0; // resistance of R1 (75K) -see text!
   const float R2 = 10000.0; // resistance of R2 (10K) - see text!
-  float value = analogRead(A3);
+  float value = analogRead(voltage_pin);
   float vout = (value * 5.0) / 1024.0; // see text
   float vin = vout / (R2/(R1+R2)); 
   if (vin<0.09) {
@@ -422,11 +434,18 @@ void retract_pusher_if_mag_out() {
     set_motor(true); // If mag is out, and pusher is extended, retract the motor. 
   }
 }
+void handle_fx() {
+  if ( touch_sensor.query() ) {
+    digitalWrite(fx_pin,HIGH);
+  } else {
+    digitalWrite(fx_pin,LOW);
+  }
+}
 void loop() {
   pusher_safety_shutoff();
   handle_flywheels();
   update_buttons();
   render_display();
-  retract_pusher_if_mag_out();
+  handle_fx();
 }
 
