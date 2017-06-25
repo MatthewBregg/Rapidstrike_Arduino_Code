@@ -45,7 +45,7 @@ const int selector_switch_b = 0;
 const int flashlight_pin = 0; 
 const int touch_sensor_pin = 3; // NOTE : THIS IS TOUCHED WHEN HIGH (active_high)
 const int fx_pin = A5;
-const int voltge_pin = 0
+const int voltage_pin = A2;
 /* End the section on pins */
 
 /** 
@@ -317,8 +317,8 @@ void setup()   {
 ;
 float calculate_voltage() {
 //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
-  const float R1 = 75000.0; // resistance of R1 (75K) -see text!
-  const float R2 = 10000.0; // resistance of R2 (10K) - see text!
+  const float R1 = 68300.0; // resistance of R1 (75K) -see text!
+  const float R2 = 9920.0; // resistance of R2 (10K) - see text!
   float value = analogRead(voltage_pin);
   float vout = (value * 5.0) / 1024.0; // see text
   float vin = vout / (R2/(R1+R2)); 
@@ -357,8 +357,8 @@ void render_ammo_counter() {
 
 
 void render_battery_indicator() {
-  const float battery_min_voltage = 7.0;
-  const float battery_full_voltage = 8.4;
+  const float battery_min_voltage = 9;
+  const float battery_full_voltage = 12.6;
   static int battery_percentage = 0;
   static byte voltage_to_print = 0; // Doing this to avoid float operations every single display update when printing, probably not needed though.
   // First handle updating voltage reading if enough time has passed!
@@ -375,12 +375,12 @@ void render_battery_indicator() {
     }
 
   // hard code in a battery icon.
-  display.drawRect(7,3,3,2,1);
-  display.drawRect(3,5,11,20,1);
-  display.fillRect(3,5,11,20-battery_percentage,1);
+  display.drawRect(4,3,3,2,1);
+  display.drawRect(0,5,11,20,1);
+  display.fillRect(0,5,11,20-battery_percentage,1);
   
   // Now add a voltage display.
-  display.setCursor(17, 2);
+  display.setCursor(13, 2);
   display.setTextColor(1);
   display.setTextSize(1);
   display.print(voltage_to_print/10);
