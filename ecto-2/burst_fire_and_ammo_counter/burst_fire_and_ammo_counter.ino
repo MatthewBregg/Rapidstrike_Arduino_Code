@@ -106,7 +106,7 @@ BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
 // cycler would have a very low debounce delay, 
 // and be used for fire control where bouncing might have to happen for good cycle control.
 // Ammo cycler can have a high debounce, and be used for ammo counting.
-BasicDebounce cycler = BasicDebounce(cycle_switch,13, HIGH);
+BasicDebounce cycler = BasicDebounce(cycle_switch,15, HIGH);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50);
