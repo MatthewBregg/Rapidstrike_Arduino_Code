@@ -40,12 +40,13 @@ const int trigger_switch = 6;
 const int cycle_switch = A4;
 const int rev_switch = 8;
 const int mag_switch = 4;
-const int selector_switch_a = 0;
-const int selector_switch_b = 0;
-const int flashlight_pin = 0; 
+const int selector_switch_a = A1;
+const int selector_switch_b = A0;
 const int touch_sensor_pin = 3; // NOTE : THIS IS TOUCHED WHEN HIGH (active_high)
 const int fx_pin = A5;
 const int voltage_pin = A2;
+
+bool fx_enabled = true;
 /* End the section on pins */
 
 /** 
@@ -171,7 +172,7 @@ void set_burst_fire(byte mode) {
 
 bool stealth_status = false;
 bool handle_stealth_mode(BasicDebounce* button) {
-  const uint16_t hold_time = 3000; //How many MS a button must be held down to trigger the flashlight
+  const uint16_t hold_time = 3000; //How many MS a button must be held down to enable/disable stealth mode
   // Determine if stealth mode should changee
   if (button->time_in_state() > hold_time ) {
     stealth_status = !stealth_status;
@@ -180,14 +181,11 @@ bool handle_stealth_mode(BasicDebounce* button) {
   return false;
 }
 
-bool handle_flashlight(BasicDebounce* button) { 
-  static uint8_t flashlight_status = LOW; // Can just fully encapsulate this in function.
-  const uint16_t flashlight_hold_time = 750; //How many MS a button must be held down to trigger the flashlight
-  // Determine if flashlight should change
-  if (button->time_in_state() > flashlight_hold_time ) {
-    if ( flashlight_status == LOW ) { flashlight_status = HIGH; }
-    else { flashlight_status = LOW; }
-    digitalWrite(flashlight_pin,flashlight_status); // Set flashlight to be on/off
+bool handle_fx(BasicDebounce* button) { 
+  const uint16_t fx_hold_time = 750; //How many MS a button must be held down to trigger the fx
+  // Determine if fx should change
+  if (button->time_in_state() > fx_hold_time ) {
+    fx_enabled = !fx_enabled;
     return true;
   }
   return false;
@@ -215,13 +213,13 @@ void selector_a_handler(BasicDebounce* button) {
 
 void selector_a_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_flashlight(button) ) { return; }
+  if ( handle_fx(button) ) { return; }
   selector_a_handler(button);
 }
 
 void selector_b_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_flashlight(button) ) { return; }
+  if ( handle_fx(button) ) { return; }
   selector_b_handler(button);
 }
 
@@ -289,8 +287,7 @@ void setup()   {
   pinMode(selector_switch_b, INPUT_PULLUP);
   pinMode(touch_sensor_pin,INPUT_PULLUP);
   //---------------------------------------
-  // Flash light
-  pinMode(flashlight_pin,OUTPUT);
+
 
   // Volt meter
   //---------------------
@@ -435,7 +432,7 @@ void retract_pusher_if_mag_out() {
   }
 }
 void handle_fx() {
-  if ( touch_sensor.query() ) {
+  if ( touch_sensor.query() && !stealth_status && fx_enabled ) {
     digitalWrite(fx_pin,HIGH);
   } else {
     digitalWrite(fx_pin,LOW);
