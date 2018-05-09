@@ -67,6 +67,7 @@ void enable_flywheels(bool rev) {
   }
 }
 bool ignore_rev_trigger = false;
+bool motor_enabled = false;
 void block_until_revved() {
   byte feed_delay = 98; // 125 is good. 70 a tiny bit too low. 
 
@@ -91,6 +92,10 @@ void block_until_revved() {
     // We are already revved, no need to wait!
     feed_delay = 0;
   } 
+
+  if (motor_enabled) {
+    feed_delay = 0; // We are already pushing, no sense delaying!!
+  }
   ignore_rev_trigger = true; // Handling revving for the user now.
   enable_flywheels(true);
   delay(feed_delay);
@@ -111,14 +116,13 @@ int shots_to_fire = 0;
  *  Always use this to control the motor, as it ensures there is a delay during the switch, and only allows one to be on at a time
  *  This avoids shorts.
  */
-bool motor_enabled = false;
 long motor_enabled_at = 0;
 long cycle_last_depressed_at = 0;
 bool pusher_was_stalled = false;
 void clear_stall_safety() {
   pusher_was_stalled = false;
 }
-const int safety_interval = 300; //How many milliseconds to let the motor run without the cycle switched being hit before shutting it off.
+const int safety_interval = 250; //How many milliseconds to let the motor run without the cycle switched being hit before shutting it off.
 void pusher_safety_shutoff() {
   bool stalled = ((millis() - cycle_last_depressed_at) > safety_interval) && ((millis() - motor_enabled_at)  > safety_interval);
   // Logic is : If it has been n time since the motor was enabled, and in that time, the pusher has not cycled, we have a stall.
@@ -173,8 +177,12 @@ BasicDebounce selector_a = BasicDebounce(selector_switch_a,50, LOW);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50, LOW);
 
 
-
+enum FireMode  { burst_fire = 0, full_auto = 1 };
+FireMode fire_mode = burst_fire;
+uint8_t shots_fired = 0;
+int burst_mode = 3; //How many shots to fire with each trigger pull.
 void set_fire_mode() {
+ FireMode old_fire_mode = fire_mode; 
  if ( motor_enabled ) {
   return; // If we set the firing mode while the motor is running, shots_to_fire gets reset, and that's bad!
   // We could probably be fine to remove that, but changing fire modes mid shot is probably a bad idea anyway.
@@ -185,6 +193,9 @@ void set_fire_mode() {
     set_full_auto();
  } else if ( selector_b.query() ) {
     set_burst_fire(1);
+ }
+ if ( fire_mode != old_fire_mode ) {
+  clear_stall_safety();
  }
 }
 
@@ -199,11 +210,6 @@ void update_buttons() {
 }
 
 void render_display(bool force_render);
-
-uint8_t shots_fired = 0;
-int burst_mode = 3; //How many shots to fire with each trigger pull.
-enum FireMode  { burst_fire = 0, full_auto = 1 };
-FireMode fire_mode = burst_fire;
 
 void semi_auto_trigger_press_handler(BasicDebounce* button) {
   // Interruptable bursts, pulling the trigger again will restart the burst!
