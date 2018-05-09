@@ -50,18 +50,25 @@ constexpr int flashlight_pin = 0;
 
 BasicDebounce rev = BasicDebounce(rev_switch, 5, LOW);
 long last_stopped_revving_at = 0;
+long last_started_revving_at = 0;
+bool current_rev_status = false;
 void enable_flywheels(bool rev) {
     if(rev){
       //start flywheels
       OCR1B = 500; //go
+      current_rev_status = true;
+      last_started_revving_at = millis();
   } else {
     OCR1B = 230; //shutdown
+    if ( current_rev_status ) {
     last_stopped_revving_at = millis();
+    }
+    current_rev_status = false;
   }
 }
 bool ignore_rev_trigger = false;
 void block_until_revved() {
-  byte feed_delay = 150;
+  byte feed_delay = 98; // 125 is good. 70 a tiny bit too low. 
 
   // Handle lowering the feed delay if we recently revved.s
   if ( (millis() - last_stopped_revving_at)  < 1000 ) {
@@ -78,6 +85,12 @@ void block_until_revved() {
     // IF we are already revving with the rev trigger, then feed delay = 0;
     feed_delay = 0;
   }
+
+  if ( (last_started_revving_at - last_stopped_revving_at ) > feed_delay) {
+    // This means we started revving, and haven't stopped yet!
+    // We are already revved, no need to wait!
+    feed_delay = 0;
+  } 
   ignore_rev_trigger = true; // Handling revving for the user now.
   enable_flywheels(true);
   delay(feed_delay);
@@ -105,7 +118,7 @@ bool pusher_was_stalled = false;
 void clear_stall_safety() {
   pusher_was_stalled = false;
 }
-const int safety_interval = 250; //How many milliseconds to let the motor run without the cycle switched being hit before shutting it off.
+const int safety_interval = 300; //How many milliseconds to let the motor run without the cycle switched being hit before shutting it off.
 void pusher_safety_shutoff() {
   bool stalled = ((millis() - cycle_last_depressed_at) > safety_interval) && ((millis() - motor_enabled_at)  > safety_interval);
   // Logic is : If it has been n time since the motor was enabled, and in that time, the pusher has not cycled, we have a stall.
@@ -375,8 +388,8 @@ void render_ammo_counter() {
 
 
 void render_battery_indicator() {
-  const float battery_min_voltage = 9;
-  const float battery_full_voltage = 12.6;
+  constexpr float battery_min_voltage = 3.4*4;
+  constexpr float battery_full_voltage = 4.2*4;
   static int battery_percentage = 0;
   static short voltage_to_print = 0; // Doing this to avoid float operations every single display update when printing, probably not needed though.
   // First handle updating voltage reading if enough time has passed!
@@ -459,11 +472,6 @@ void render_display(bool force_render = false) {
   }
 }
 
-void retract_pusher_if_mag_out() {
-  if (!magazine_in.query() && !cycler.query() && !pusher_was_stalled) {
-    set_motor(true); // If mag is out, and pusher is extended, retract the motor. 
-  }
-}
 
 
 void loop() {
@@ -471,5 +479,5 @@ void loop() {
   handle_rev_trigger();
   update_buttons();
   render_display();
-  retract_pusher_if_mag_out();
+
 }
