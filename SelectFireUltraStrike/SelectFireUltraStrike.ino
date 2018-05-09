@@ -75,8 +75,8 @@ void block_until_revved() {
   }
   
   if ( rev.query() ) {
-    // IF we are already revving with the rev trigger, then skip this logic and thus fire immedietely.
-    return;
+    // IF we are already revving with the rev trigger, then feed delay = 0;
+    feed_delay = 0;
   }
   ignore_rev_trigger = true; // Handling revving for the user now.
   enable_flywheels(true);
