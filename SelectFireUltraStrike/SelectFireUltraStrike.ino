@@ -94,7 +94,6 @@ void set_motor(bool on) {
   }
 }
 
-
 BasicDebounce trigger = BasicDebounce(trigger_switch, 20, LOW);
 BasicDebounce rev = BasicDebounce(rev_switch, 5, LOW);
 // Idea, perhaps have cycler, and ammo cycler objects.
@@ -105,6 +104,44 @@ BasicDebounce cycler = BasicDebounce(cycle_switch,5, LOW);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50, LOW);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50, LOW);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50, LOW);
+
+
+void enable_flywheels(bool rev) {
+    if(rev){
+      //start flywheels
+      OCR1B = 500; //go
+  } else {
+    OCR1B = 230; //shutdown
+  }
+}
+bool ignore_rev_trigger = false;
+void handle_rev_trigger() {
+  if ( ignore_rev_trigger ) {
+    return;
+  }
+  enable_flywheels(rev.query());
+}
+
+
+
+void block_until_revved() {
+  constexpr byte feed_delay = 150;
+  if ( rev.query() ) {
+    // IF we are already revving with the rev trigger, then skip this logic and thus fire immedietely.
+    return;
+  }
+  ignore_rev_trigger = true; // Handling revving for the user now.
+  enable_flywheels(true);
+  delay(feed_delay);
+  return;
+}
+
+void stop_flywheels_if_not_revving() {
+  ignore_rev_trigger = false; // Done firing, returning rev control to user.
+  if (!rev.query()) {
+    enable_flywheels(false);
+  }
+}
 
 void set_fire_mode() {
  if ( motor_enabled ) {
@@ -144,11 +181,13 @@ void semi_auto_trigger_press_handler(BasicDebounce* button) {
   if ( shots_to_fire < max_stack) { // Update this line if adding bigger bursts.
      shots_to_fire = min(shots_to_fire+burst_mode,max_stack); // Add burst_mode shots to be fired (or as firable if in fdl style)
      // Do not allow stacking more shots than max_stack.
+     block_until_revved();
      set_motor(true);
   }
 }
 
 void full_auto_trig_press_handler(BasicDebounce* button) {
+  block_until_revved();
   set_motor(true);
 }
 
@@ -191,9 +230,6 @@ bool handle_stealth_mode(BasicDebounce* button) {
 
 
 
-
-
-
 void handle_pusher_retract(BasicDebounce* button) {
   // Keep track of shots to fire and ammo count
   ++shots_fired;
@@ -205,6 +241,7 @@ void handle_pusher_retract(BasicDebounce* button) {
   // Disable pusher if we hit our burst limit done burst firing
   if ( shots_to_fire  == 0 && fire_mode == burst_fire ) {
     set_motor(false);
+    stop_flywheels_if_not_revving();
   }
 
   // Also allow stopping a burst early. 
@@ -212,6 +249,8 @@ void handle_pusher_retract(BasicDebounce* button) {
   if ( !trigger.query() ) {
     shots_to_fire = 0;
     set_motor(false);
+    stop_flywheels_if_not_revving();
+    
   }
   cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
   render_display(true); // Pusher just left, safe to do a render
@@ -231,7 +270,7 @@ void setup()   {
   // internally, this will display the splashscreen.
   display.display();
   delay(100); 
-  display.setRotation(2); //rotate display
+  display.setRotation(0); //rotate display
   //Display setup end
   // ----------------------------------------
 
@@ -409,20 +448,9 @@ void retract_pusher_if_mag_out() {
 }
 
 
-
-void handle_flywheels() {
-  
-  if(rev.query()){
-      //start flywheels
-      OCR1B = 500; //go
-  } else {
-    OCR1B = 230; //shutdown
-  }
-}
-
 void loop() {
   pusher_safety_shutoff();
-  handle_flywheels();
+  handle_rev_trigger();
   update_buttons();
   render_display();
   retract_pusher_if_mag_out();
