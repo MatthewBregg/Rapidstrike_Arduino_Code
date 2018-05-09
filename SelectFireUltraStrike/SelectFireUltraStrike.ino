@@ -33,23 +33,20 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 /* End Oled Display PreProcessor stuff */
 
 /* Pins for the controlling motors, and reading switches. */
- 
-const int esc_out_pin = 10;
-const int motor_pin = 2;
+constexpr int motor_pin = 2;
 
 
 //These switches are active_low, aka, switch closed == low.
-constexpr int trigger_switch = 4;
+constexpr int trigger_switch = 4; // A1 is connected to NC of trigger switch, 4 to NO
 constexpr int cycle_switch = 5;
 constexpr int rev_switch = 3;
 constexpr int mag_switch = A5;
 constexpr int voltimeter_pin = A7;
-constexpr int selector_switch_a = 0;
-constexpr int selector_switch_b = 0;
+constexpr int selector_switch_a = A2;
+constexpr int selector_switch_b = A3;
 constexpr int flashlight_pin = 0; 
 /* End the section on pins */
-// Create a servo to manage the esc.
-Servo esc_flywheels;
+
 
 
 int shots_to_fire = 0;
@@ -98,7 +95,8 @@ void set_motor(bool on) {
 }
 
 
-BasicDebounce trigger = BasicDebounce(trigger_switch, 2, LOW);
+BasicDebounce trigger = BasicDebounce(trigger_switch, 20, LOW);
+BasicDebounce rev = BasicDebounce(rev_switch, 5, LOW);
 // Idea, perhaps have cycler, and ammo cycler objects.
 // cycler would have a very low debounce delay, 
 // and be used for fire control where bouncing might have to happen for good cycle control.
@@ -110,6 +108,7 @@ BasicDebounce selector_b = BasicDebounce(selector_switch_b,50, LOW);
 
 void update_buttons() {
   trigger.update();
+  rev.update();
   cycler.update();
   magazine_in.update();
   selector_a.update();
@@ -128,7 +127,8 @@ void semi_auto_trigger_press_handler(BasicDebounce* button) {
   // Also do N on the queue logic, essentially, allowing stacking up to N bursts from pulling the trigger. Going to start with one. 
   const int max_stack = (4-burst_mode)*burst_mode;
   if ( shots_to_fire < max_stack) { // Update this line if adding bigger bursts.
-     shots_to_fire = min(shots_to_fire+burst_mode,max_stack);
+     shots_to_fire = min(shots_to_fire+burst_mode,max_stack); // Add burst_mode shots to be fired (or as firable if in fdl style)
+     // Do not allow stacking more shots than max_stack.
      set_motor(true);
   }
 }
@@ -234,12 +234,18 @@ void handle_pusher_retract(BasicDebounce* button) {
   if ( shots_to_fire <  0 ) {
     shots_to_fire = 0;
   }
-  // Disable pusher if done burst firing
+  
+  // Disable pusher if we hit our burst limit done burst firing
   if ( shots_to_fire  == 0 && fire_mode == burst_fire ) {
     set_motor(false);
   }
-  if ( fire_mode == full_auto && !trigger.query() ) {
-    set_motor(false); // Useful for retract on mag release function.
+
+  // Also allow stopping a burst early. 
+  // Add a check to only run this when mode is full auto if that behavior isn't desired.
+  if ( !trigger.query() ) {
+    shots_to_fire = 0;
+    shots_fired = 0;
+    set_motor(false);
   }
   cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
   render_display(true); // Pusher just left, safe to do a render
@@ -264,8 +270,14 @@ void setup()   {
   // ----------------------------------------
 
   // Set up flywheels and their ESCs
-  esc_flywheels.attach(esc_out_pin);
+  //pin 10 flywheel motor controller PWM throttle signal
+  pinMode(10, OUTPUT);
   pinMode(LED_BUILTIN,OUTPUT);
+  //fast PWM prescaler 64 (250kHz)
+  TCCR1A = _BV(COM1B1) | _BV(WGM11);
+  TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS11) | _BV(CS10);
+  ICR1 = 624; //400Hz
+  OCR1B = 230; //write 920us low throttle
 
 
   // Motor controls
@@ -380,6 +392,14 @@ void render_battery_indicator() {
   if ( trigger.query() ) {
     display.print('T');
   }
+  if (rev.query() ) {
+    display.print('R');
+  }
+
+  if ( digitalRead(rev_switch) == LOW ) {
+    display.print('Y');
+  }
+  
 }
 
 void draw_dart(byte x, byte y) {
@@ -428,21 +448,13 @@ void retract_pusher_if_mag_out() {
 
 
 void handle_flywheels() {
-  static int old_throttle = HIGH;
-  int throttle = digitalRead(rev_switch);
-  if ( throttle == old_throttle ) {
-    return;
-  }
-  old_throttle = throttle;
-  if ( throttle == LOW ) {
-    digitalWrite(LED_BUILTIN,!throttle);
-    throttle = 179;
+  
+  if(rev.query()){
+      //start flywheels
+      OCR1B = 500; //go
   } else {
-    digitalWrite(LED_BUILTIN,!throttle);
-    throttle = 0;
+    OCR1B = 230; //shutdown
   }
-  //throttle = map(throttle, 0, 1023, 0, 179);
-  esc_flywheels.write(throttle);
 }
 
 void loop() {
