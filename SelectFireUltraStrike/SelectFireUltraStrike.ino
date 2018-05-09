@@ -48,6 +48,49 @@ constexpr int flashlight_pin = 0;
 /* End the section on pins */
 
 
+BasicDebounce rev = BasicDebounce(rev_switch, 5, LOW);
+long last_stopped_revving_at = 0;
+void enable_flywheels(bool rev) {
+    if(rev){
+      //start flywheels
+      OCR1B = 500; //go
+  } else {
+    OCR1B = 230; //shutdown
+    last_stopped_revving_at = millis();
+  }
+}
+bool ignore_rev_trigger = false;
+void block_until_revved() {
+  byte feed_delay = 150;
+
+  // Handle lowering the feed delay if we recently revved.s
+  if ( (millis() - last_stopped_revving_at)  < 1000 ) {
+    feed_delay = 80;
+  }
+  if ( (millis() - last_stopped_revving_at)  < 300 ) {
+    feed_delay = 40;
+  }
+  if ( (millis() - last_stopped_revving_at)  < 100 ) {
+    feed_delay = 20;
+  }
+  
+  if ( rev.query() ) {
+    // IF we are already revving with the rev trigger, then skip this logic and thus fire immedietely.
+    return;
+  }
+  ignore_rev_trigger = true; // Handling revving for the user now.
+  enable_flywheels(true);
+  delay(feed_delay);
+  return;
+}
+
+void stop_flywheels_if_not_revving() {
+  ignore_rev_trigger = false; // Done firing, returning rev control to user.
+  if (!rev.query()) {
+    enable_flywheels(false);
+  }
+}
+
 
 int shots_to_fire = 0;
 /** 
@@ -75,6 +118,18 @@ void pusher_safety_shutoff() {
   }
 }
 
+// Also ensure the flywheels don't get stuck on if a pusher crashes.
+void handle_rev_trigger() {
+  if (pusher_was_stalled) {
+    enable_flywheels(false);
+    ignore_rev_trigger = false;
+  }
+  if ( ignore_rev_trigger ) {
+    return;
+  }
+  enable_flywheels(rev.query());
+}
+
 void set_motor(bool on) {
   if ( pusher_was_stalled ) {
     // If we were stalled, turn off everything.
@@ -95,7 +150,6 @@ void set_motor(bool on) {
 }
 
 BasicDebounce trigger = BasicDebounce(trigger_switch, 20, LOW);
-BasicDebounce rev = BasicDebounce(rev_switch, 5, LOW);
 // Idea, perhaps have cycler, and ammo cycler objects.
 // cycler would have a very low debounce delay, 
 // and be used for fire control where bouncing might have to happen for good cycle control.
@@ -106,42 +160,6 @@ BasicDebounce selector_a = BasicDebounce(selector_switch_a,50, LOW);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50, LOW);
 
 
-void enable_flywheels(bool rev) {
-    if(rev){
-      //start flywheels
-      OCR1B = 500; //go
-  } else {
-    OCR1B = 230; //shutdown
-  }
-}
-bool ignore_rev_trigger = false;
-void handle_rev_trigger() {
-  if ( ignore_rev_trigger ) {
-    return;
-  }
-  enable_flywheels(rev.query());
-}
-
-
-
-void block_until_revved() {
-  constexpr byte feed_delay = 150;
-  if ( rev.query() ) {
-    // IF we are already revving with the rev trigger, then skip this logic and thus fire immedietely.
-    return;
-  }
-  ignore_rev_trigger = true; // Handling revving for the user now.
-  enable_flywheels(true);
-  delay(feed_delay);
-  return;
-}
-
-void stop_flywheels_if_not_revving() {
-  ignore_rev_trigger = false; // Done firing, returning rev control to user.
-  if (!rev.query()) {
-    enable_flywheels(false);
-  }
-}
 
 void set_fire_mode() {
  if ( motor_enabled ) {
