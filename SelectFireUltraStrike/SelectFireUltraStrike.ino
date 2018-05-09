@@ -106,6 +106,20 @@ BasicDebounce magazine_in = BasicDebounce(mag_switch,50, LOW);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50, LOW);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50, LOW);
 
+void set_fire_mode() {
+ if ( motor_enabled ) {
+  return; // If we set the firing mode while the motor is running, shots_to_fire gets reset, and that's bad!
+  // We could probably be fine to remove that, but changing fire modes mid shot is probably a bad idea anyway.
+ }
+ if ( !selector_a.query() && !selector_b.query() ) {
+  set_burst_fire(3);
+ } else if ( selector_a.query() ) {
+    set_full_auto();
+ } else if ( selector_b.query() ) {
+    set_burst_fire(1);
+ }
+}
+
 void update_buttons() {
   trigger.update();
   rev.update();
@@ -113,6 +127,7 @@ void update_buttons() {
   magazine_in.update();
   selector_a.update();
   selector_b.update();
+  set_fire_mode();
 }
 
 void render_display(bool force_render);
@@ -174,56 +189,8 @@ bool handle_stealth_mode(BasicDebounce* button) {
   return false;
 }
 
-bool handle_flashlight(BasicDebounce* button) { 
-  static uint8_t flashlight_status = LOW; // Can just fully encapsulate this in function.
-  const uint16_t flashlight_hold_time = 750; //How many MS a button must be held down to trigger the flashlight
-  // Determine if flashlight should change
-  if (button->time_in_state() > flashlight_hold_time ) {
-    if ( flashlight_status == LOW ) { flashlight_status = HIGH; }
-    else { flashlight_status = LOW; }
-    digitalWrite(flashlight_pin,flashlight_status); // Set flashlight to be on/off
-    return true;
-  }
-  return false;
-}
 
-void selector_b_handler(BasicDebounce* button) {
-  clear_stall_safety();
-  if ( fire_mode == burst_fire && burst_mode == 3) {
-    set_full_auto();
-  } else if (fire_mode == full_auto) {
-    set_burst_fire(1);
-  } else { ++burst_mode; }
-  render_display(true);
-}
 
-void selector_a_handler(BasicDebounce* button) {
-  clear_stall_safety();
-  if ( fire_mode == burst_fire && burst_mode == 1 ) {
-    set_full_auto();
-  } else if (fire_mode == full_auto) {
-    set_burst_fire(3);
-  } else { --burst_mode; }
-  render_display(true);
-}
-
-void selector_a_release_handler(BasicDebounce* button) {
-  if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_flashlight(button) ) { return; }
-  selector_a_handler(button);
-}
-
-void selector_b_release_handler(BasicDebounce* button) {
-  if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_flashlight(button) ) { return; }
-  selector_b_handler(button);
-}
-
-void setup_fs_buttons() {
-
-  selector_a.set_released_command(&selector_a_release_handler);
-  selector_b.set_released_command(&selector_b_release_handler);
-}
 
 
 
@@ -244,7 +211,6 @@ void handle_pusher_retract(BasicDebounce* button) {
   // Add a check to only run this when mode is full auto if that behavior isn't desired.
   if ( !trigger.query() ) {
     shots_to_fire = 0;
-    shots_fired = 0;
     set_motor(false);
   }
   cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
@@ -297,9 +263,6 @@ void setup()   {
    pinMode(voltimeter_pin, INPUT);
   //---------------------
 
-
-  // Set up fire_select buttons
-  setup_fs_buttons();
 
   // Set up the cycle handler
   cycler.set_pressed_command(&handle_pusher_retract);
