@@ -9,7 +9,7 @@
 
 // If using software SPI (the default case):
 #define OLED_MOSI   9
-#define OLED_CLK   10
+#define OLED_CLK   A2
 #define OLED_DC    11
 #define OLED_CS    12
 #define OLED_RESET 13
@@ -38,12 +38,13 @@ const int nchan_flywheel_mosfet_pin = A5;
 
 //These switches are active_low, aka, switch closed == low.
 const int trigger_switch = 4;
+const int other_trigger_switch = 1;
 const int cycle_switch = 5;
 const int rev_switch = 8;
 const int mag_switch = A4;
 const int selector_switch_a = A0;
 const int selector_switch_b = A1;
-const int flashlight_pin = A2; 
+const int flashlight_pin = 10; 
 /* End the section on pins */
 
 /** 
@@ -103,7 +104,7 @@ void set_motor(bool on) {
 }
 
 
-BasicDebounce trigger = BasicDebounce(trigger_switch, 20);
+BasicDebounce trigger = BasicDebounce(trigger_switch, 8);
 // Idea, perhaps have cycler, and ammo cycler objects.
 // cycler would have a very low debounce delay, 
 // and be used for fire control where bouncing might have to happen for good cycle control.
@@ -124,7 +125,7 @@ void update_buttons() {
 void render_display(bool force_render);
 
 uint8_t shots_fired = 0;
-int burst_mode = 3; //How many shots to fire with each trigger pull.
+int burst_mode = 3; //How many shots to fire with each j pull.
 enum FireMode  { burst_fire = 0, full_auto = 1 };
 FireMode fire_mode = burst_fire;
 
@@ -186,7 +187,13 @@ bool handle_flashlight(BasicDebounce* button) {
   if (button->time_in_state() > flashlight_hold_time ) {
     if ( flashlight_status == LOW ) { flashlight_status = HIGH; }
     else { flashlight_status = LOW; }
-    digitalWrite(flashlight_pin,flashlight_status); // Set flashlight to be on/off
+
+    if (flashlight_status == HIGH) { // Set flashlight on/off.
+      analogWrite(flashlight_pin,250);
+    } else {
+      analogWrite(flashlight_pin, 0);
+    }
+
     return true;
   }
   return false;
@@ -264,7 +271,7 @@ void setup()   {
   // internally, this will display the splashscreen.
   display.display();
   delay(100); 
-  display.setRotation(2); //rotate display
+  display.setRotation(0); //rotate display
   //Display setup end
   // ----------------------------------------
 
@@ -284,12 +291,19 @@ void setup()   {
   // Switch inputs
   //---------------------------------------
   pinMode(trigger_switch, INPUT_PULLUP);
+  pinMode(other_trigger_switch, INPUT_PULLUP);
   pinMode(cycle_switch, INPUT_PULLUP);
   pinMode(rev_switch, INPUT_PULLUP);
   pinMode(mag_switch, INPUT_PULLUP);
   pinMode(selector_switch_a, INPUT_PULLUP);
   pinMode(selector_switch_b, INPUT_PULLUP);
   //---------------------------------------
+
+  
+  // Set up trigger as dual pin
+  trigger.AddSecondaryPin(other_trigger_switch);
+
+  
   // Flash light
   pinMode(flashlight_pin,OUTPUT);
 
