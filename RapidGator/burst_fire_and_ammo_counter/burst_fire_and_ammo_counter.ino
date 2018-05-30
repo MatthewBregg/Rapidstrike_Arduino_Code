@@ -55,7 +55,7 @@ const int flashlight_pin = 10;
  *  always set whichever one is being switched to low to low first!!!
  */ 
 
-int shots_to_fire = 0;
+
 /** 
  *  Turns motor on or off, enabling the break whenever the motor is off.
  *  Always use this to control the motor, as it ensures there is a delay during the switch, and only allows one to be on at a time
@@ -77,7 +77,6 @@ void pusher_safety_shutoff() {
     //Pusher is stalled?! Turn off motor, hopefully before it gets damaged.
     pusher_was_stalled = true;
     set_motor(false);
-    shots_to_fire = 0;
   }
 }
 void set_motor(bool on) {
@@ -125,19 +124,6 @@ void update_buttons() {
 void render_display(bool force_render);
 
 uint8_t shots_fired = 0;
-int burst_mode = 3; //How many shots to fire with each j pull.
-enum FireMode  { burst_fire = 0, full_auto = 1 };
-FireMode fire_mode = burst_fire;
-
-void semi_auto_trigger_press_handler(BasicDebounce* button) {
-  // Interruptable bursts, pulling the trigger again will restart the burst!
-  // Also do N on the queue logic, essentially, allowing stacking up to N bursts from pulling the trigger. Going to start with one. 
-  const int max_stack = (4-burst_mode)*burst_mode;
-  if ( shots_to_fire < max_stack) { // Update this line if adding bigger bursts.
-     shots_to_fire = min(shots_to_fire+burst_mode,max_stack);
-     set_motor(true);
-  }
-}
 
 void full_auto_trig_press_handler(BasicDebounce* button) {
   set_motor(true);
@@ -152,22 +138,11 @@ void full_auto_trig_release_handler(BasicDebounce* button) {
 
 // If true, then fire full_auto, else burst fire
 void set_full_auto() {
-    burst_mode = 0;
-    fire_mode = full_auto;
-    shots_to_fire = 0;
     set_motor(false);
     trigger.set_pressed_command(&full_auto_trig_press_handler);
     trigger.set_released_command(&full_auto_trig_release_handler); 
 }
 
-void set_burst_fire(byte mode) {
-  burst_mode = mode;
-  fire_mode = burst_fire;
-  shots_to_fire = 0;
-  set_motor(false);
-  trigger.set_pressed_command(&semi_auto_trigger_press_handler); 
-  trigger.set_released_command(0);
-}
 
 bool stealth_status = false;
 bool handle_stealth_mode(BasicDebounce* button) {
@@ -201,21 +176,11 @@ bool handle_flashlight(BasicDebounce* button) {
 
 void selector_b_handler(BasicDebounce* button) {
   clear_stall_safety();
-  if ( fire_mode == burst_fire && burst_mode == 3) {
-    set_full_auto();
-  } else if (fire_mode == full_auto) {
-    set_burst_fire(1);
-  } else { ++burst_mode; }
   render_display(true);
 }
 
 void selector_a_handler(BasicDebounce* button) {
   clear_stall_safety();
-  if ( fire_mode == burst_fire && burst_mode == 1 ) {
-    set_full_auto();
-  } else if (fire_mode == full_auto) {
-    set_burst_fire(3);
-  } else { --burst_mode; }
   render_display(true);
 }
 
@@ -242,15 +207,7 @@ void setup_fs_buttons() {
 void handle_pusher_retract(BasicDebounce* button) {
   // Keep track of shots to fire and ammo count
   ++shots_fired;
-  --shots_to_fire;
-  if ( shots_to_fire <  0 ) {
-    shots_to_fire = 0;
-  }
-  // Disable pusher if done burst firing
-  if ( shots_to_fire  == 0 && fire_mode == burst_fire ) {
-    set_motor(false);
-  }
-  if ( fire_mode == full_auto && !trigger.query() ) {
+  if (!trigger.query() ) {
     set_motor(false); // Useful for retract on mag release function.
   }
   cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
@@ -320,7 +277,7 @@ void setup()   {
   cycler.set_pressed_command(&handle_pusher_retract);
 
   // Set up trigger buttons & firing mode, default to 2 shot burst.
-  set_burst_fire(2);
+  set_full_auto();
   
 }
 
@@ -410,17 +367,10 @@ void draw_dart(byte x, byte y) {
 }
 
 void render_firing_mode() {
-  if ( fire_mode == burst_fire ) {
-     for ( byte i = 0; i <= burst_mode; ++i ) {
-      draw_dart(2*i+3,display.height()-3*i);
-     }
-     display.drawChar(15,display.height()-3*3, '0'+burst_mode, 1, 0, 1);
-  } else { 
     display.setCursor(2, display.height()-3*3);
     display.setTextColor(1);
     display.setTextSize(1);
     display.print("AUTO");
-  }
 }
 void render_display(bool force_render = false) {
   if ( stealth_status ) {
