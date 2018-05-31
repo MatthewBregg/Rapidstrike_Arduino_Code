@@ -127,7 +127,96 @@ void render_display(bool force_render);
 
 uint8_t shots_fired = 0;
 
+bool is_revving = false;
+long turned_off_flywheels_at = 0;
+void block_and_rev_flywheels() {
+  // NOTE: This was done with a 43 mm cage, using blasterparts wheels + morpheus, resulting in a rather low fps set up.
+  // - 117 with elite style
+  // - ~100 with brick/waffle
+  // - 109 with accufakes
+  //
+  // This is for low fps games/side arm, atlhough in the future, I'd like to reprint a slightly lower crush cage than this, as even for UF
+  // I can go a tad higher.
+  // I wouldn't expect critical velocity to change that much, but probably worth retesting delay schedule if I change crush.
+
+  // This was tested on a storage voltage 2S, so about 3.75 per cell, and is pretty much on the edge of 
+  // supercritical. On a lower voltage battery, or even a NiMH pack, expect less than ideal, but usable, performance.
+  
+  if ( is_revving ) {
+    // We released and depressed the trigger mid cycle, 
+    // we never stopped firing, this was alreay ran, take no action.
+    return;
+  }
+
+  /**
+   * Use a snippet like this to enable easily and accurately testing
+   * feed delay
+  digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
+  delay(105);
+  digitalWrite(nchan_flywheel_mosfet_pin,LOW);
+  delay(950);
+  digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
+  delay(96);
+  return;
+  **/
+
+  
+  // Otherwise, calculate delay, rev, delay, and return;
+  // 105 is the feed delay for a fully cold shot.
+  byte feed_delay = 105; // 105 is on the edge, but as long a delay as I want to use. 
+  // Expect very slight FPS losses at low battery. seems close but still low
+  
+  if ( ( millis() - turned_off_flywheels_at) < 750 ) {
+    feed_delay = 96;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 650 ) {
+    feed_delay = 88;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 600 ) {
+    feed_delay = 85;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 500 ) {
+    feed_delay = 80;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 400 ) {
+    feed_delay = 77;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 300 ) {
+    feed_delay = 70;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 200 ) {
+    feed_delay = 55;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 100 ) {
+    // Thought this could be lower like 25, but nope, got average 74 with that!!
+    // 35 is close, but still on the low side, got some cold shots and was more 100 than 99.
+    // 40 however, IS enough!
+    feed_delay = 40;
+  }
+  if ( (millis()-turned_off_flywheels_at) < 50 ) {
+    // Barely stopped revving, so barely do a delay
+    feed_delay = 12.5;
+  }
+  digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
+  is_revving = true;
+  delay(feed_delay);
+}
+
+void finish_revving_flywheels() {
+  turned_off_flywheels_at = millis();
+  digitalWrite(nchan_flywheel_mosfet_pin,LOW);
+  is_revving = false;
+}
+
 void full_auto_trig_press_handler(BasicDebounce* button) {
+  block_and_rev_flywheels();
   set_motor(true);
 }
 
@@ -248,6 +337,7 @@ void handle_pusher_retract(BasicDebounce* button) {
   ++shots_fired;
   if (!trigger.query() ) {
     set_motor(false); // Useful for retract on mag release function.
+    finish_revving_flywheels();
   }
   cycle_last_depressed_at = millis(); // Pusher got depressed, for safety
   render_display(true); // Pusher just left, safe to do a render
@@ -335,10 +425,6 @@ float calculate_voltage() {
     vin=0.0;//statement to quash undesired reading !
   }
   return vin;
-}
-
-void block_and_rev_flywheels() {
-   digitalWrite(nchan_flywheel_mosfet_pin,!digitalRead(rev_switch));
 }
 
 float voltage_to_disp = 0.0;
