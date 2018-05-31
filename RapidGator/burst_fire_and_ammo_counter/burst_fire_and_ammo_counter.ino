@@ -401,20 +401,83 @@ void render_battery_indicator() {
   }
 }
 
-void draw_dart(byte x, byte y) {
-  display.drawFastHLine(x,y,5,1); // Dart body
-  display.drawFastHLine(x-3,y,2,1); // Dart tail
 
+const uint8_t flashlightImageWidth = 12;
+const uint8_t flashlightImageHeight = 5;
+
+const unsigned char flashlightImage [] PROGMEM=
+  {
+
+  0xfc, 0x80, 0x2f, 0x76, 0x80, 0x2f, 0xfc, 0x8f
   
-}
-
+  };
 void render_flashlight_brightness() {
-    display.setCursor(2, display.height()-3*3);
+    display.setCursor(104, display.height()-3*3);
     display.setTextColor(1);
     display.setTextSize(1);
-    display.print(current_flashlight_brightness);
-    display.print("/");
-    display.print("255");
+
+    // Check for the special cases of 1/2, which otherwise round down to 0!!!
+    // While ugly to make special cases, uglier to add a decimal to all settings,
+    // so this is what I choose.
+    if ( current_flashlight_brightness == 1 ) {
+      display.print(".4%");
+    } else if ( current_flashlight_brightness == 2 ) {
+      display.print(".8%");
+    } else {
+      display.print((current_flashlight_brightness*100)/255);
+       display.print("% ");
+    }
+
+    // Begin flashlight drawing procedure!
+    int x_offset = 89;
+    int y_offset = 57;
+    // Top of the flashlight
+    display.drawPixel(x_offset,y_offset,1);
+    display.drawPixel(x_offset+1,y_offset,1);
+    display.drawPixel(x_offset+2,y_offset,1);
+    display.drawPixel(x_offset+3,y_offset,1);
+    display.drawPixel(x_offset+4,y_offset,1);
+    display.drawPixel(x_offset+5,y_offset,1);
+    display.drawPixel(x_offset+6,y_offset,1);
+
+    // Bottom bar of flashlight
+    display.drawPixel(x_offset,y_offset+2,1);
+    display.drawPixel(x_offset+1,y_offset+2,1);
+    display.drawPixel(x_offset+2,y_offset+2,1);
+    display.drawPixel(x_offset+3,y_offset+2,1);
+    display.drawPixel(x_offset+4,y_offset+2,1);
+    display.drawPixel(x_offset+5,y_offset+2,1);
+    display.drawPixel(x_offset+6,y_offset+2,1);
+
+    // Flashlight toggle button
+    display.drawPixel(x_offset+5,y_offset+1,1);
+
+    // Flashlight butt 
+    display.drawPixel(x_offset,y_offset+1,1);
+
+    // Flashlight lens
+    display.drawPixel(x_offset+7,y_offset-1,1);
+    display.drawPixel(x_offset+7,y_offset+3,1);
+    display.drawPixel(x_offset+8,y_offset-1,1);
+    display.drawPixel(x_offset+8,y_offset+3,1);
+    display.drawPixel(x_offset+8,y_offset,1);
+    display.drawPixel(x_offset+8,y_offset+1,1);
+    display.drawPixel(x_offset+8,y_offset+2,1);
+
+    if (flashlight_status == HIGH) {
+      // Flashlight rays
+      display.drawPixel(x_offset+10,y_offset+1,1);
+      display.drawPixel(x_offset+11,y_offset+1,1);
+      display.drawPixel(x_offset+12,y_offset+1,1);
+  
+      display.drawPixel(x_offset+10,y_offset-1,1);
+      display.drawPixel(x_offset+11,y_offset-1,1);
+      display.drawPixel(x_offset+12,y_offset-1,1);
+  
+      display.drawPixel(x_offset+10,y_offset+3,1);
+      display.drawPixel(x_offset+11,y_offset+3,1);
+      display.drawPixel(x_offset+12,y_offset+3,1);
+    }
 }
 void render_display(bool force_render = false) {
   if ( stealth_status ) {
