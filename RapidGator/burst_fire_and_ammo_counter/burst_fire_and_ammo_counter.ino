@@ -112,6 +112,7 @@ BasicDebounce cycler = BasicDebounce(cycle_switch,15);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
 BasicDebounce selector_a = BasicDebounce(selector_switch_a,50);
 BasicDebounce selector_b = BasicDebounce(selector_switch_b,50);
+BasicDebounce rev_switch_button = BasicDebounce(rev_switch,30);
 
 void update_buttons() {
   trigger.update();
@@ -119,6 +120,7 @@ void update_buttons() {
   magazine_in.update();
   selector_a.update();
   selector_b.update();
+  rev_switch_button.update();
 }
 
 void render_display(bool force_render);
@@ -159,12 +161,11 @@ bool handle_stealth_mode(BasicDebounce* button) {
 uint16_t current_flashlight_brightness = 64; 
 uint8_t flashlight_status = LOW; 
 bool handle_flashlight(BasicDebounce* button) { 
-  const uint16_t flashlight_hold_time = 750; //How many MS a button must be held down to trigger the flashlight
-  // Determine if flashlight should change
-  if (button->time_in_state() > flashlight_hold_time ) {
+    // Switch the status from low to high or vice versa
     if ( flashlight_status == LOW ) { flashlight_status = HIGH; }
     else { flashlight_status = LOW; }
 
+    // Based on that status, enable/disable the flashlight at the current power.
     if (flashlight_status == HIGH) { // Set flashlight on/off.
       //Turn on flashlight, set to current brightness
       analogWrite(flashlight_pin,current_flashlight_brightness); 
@@ -174,8 +175,6 @@ bool handle_flashlight(BasicDebounce* button) {
     }
 
     return true;
-  }
-  return false;
 }
 
 void set_flashlight_to_brightness() {
@@ -228,13 +227,11 @@ void selector_a_handler(BasicDebounce* button) {
 
 void selector_a_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_flashlight(button) ) { return; }
   selector_a_handler(button);
 }
 
 void selector_b_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_flashlight(button) ) { return; }
   selector_b_handler(button);
 }
 
@@ -320,6 +317,9 @@ void setup()   {
 
   // Set up trigger buttons & firing mode, default to 2 shot burst.
   set_full_auto();
+
+  // Set up the rev switch to toggle the flashlight
+  rev_switch_button.set_pressed_command(&handle_flashlight);
   
 }
 
@@ -337,7 +337,7 @@ float calculate_voltage() {
   return vin;
 }
 
-void handle_flywheels() {
+void block_and_rev_flywheels() {
    digitalWrite(nchan_flywheel_mosfet_pin,!digitalRead(rev_switch));
 }
 
@@ -503,7 +503,6 @@ void retract_pusher_if_mag_out() {
 }
 void loop() {
   pusher_safety_shutoff();
-  handle_flywheels();
   update_buttons();
   render_display();
   retract_pusher_if_mag_out();
