@@ -146,7 +146,7 @@ void set_full_auto() {
 
 bool stealth_status = false;
 bool handle_stealth_mode(BasicDebounce* button) {
-  const uint16_t hold_time = 3000; //How many MS a button must be held down to trigger the flashlight
+  const uint16_t hold_time = 1500; //How many MS a button must be held down to trigger the stealth mode.
   // Determine if stealth mode should changee
   if (button->time_in_state() > hold_time ) {
     stealth_status = !stealth_status;
@@ -155,8 +155,10 @@ bool handle_stealth_mode(BasicDebounce* button) {
   return false;
 }
 
+// This MUST be a power of 2 with the current increment and decrement methods!
+uint16_t current_flashlight_brightness = 64; 
+uint8_t flashlight_status = LOW; 
 bool handle_flashlight(BasicDebounce* button) { 
-  static uint8_t flashlight_status = LOW; // Can just fully encapsulate this in function.
   const uint16_t flashlight_hold_time = 750; //How many MS a button must be held down to trigger the flashlight
   // Determine if flashlight should change
   if (button->time_in_state() > flashlight_hold_time ) {
@@ -164,8 +166,10 @@ bool handle_flashlight(BasicDebounce* button) {
     else { flashlight_status = LOW; }
 
     if (flashlight_status == HIGH) { // Set flashlight on/off.
-      analogWrite(flashlight_pin,250);
+      //Turn on flashlight, set to current brightness
+      analogWrite(flashlight_pin,current_flashlight_brightness); 
     } else {
+      // Turn off flashlight by setting the PWM cycle to 0% duty.
       analogWrite(flashlight_pin, 0);
     }
 
@@ -174,13 +178,51 @@ bool handle_flashlight(BasicDebounce* button) {
   return false;
 }
 
+void set_flashlight_to_brightness() {
+  // If flashlight is on, redo analog write to set current PWM duty.
+  if (flashlight_status == HIGH) {
+    analogWrite(flashlight_pin,current_flashlight_brightness);
+  }
+}
+
+void increment_flashlight_brightness() {
+  if ( current_flashlight_brightness == 255 ) {
+    return;
+  }
+
+  if (current_flashlight_brightness == 0) {
+    current_flashlight_brightness = 1;
+    return;
+  }
+  
+  current_flashlight_brightness *= 2;
+  if (current_flashlight_brightness == 256) {
+    current_flashlight_brightness = 255;
+  }
+}
+
+void decrement_flashlight_brightness() {
+  if ( current_flashlight_brightness == 255 ) {
+    ++current_flashlight_brightness;
+  }
+  // Enabling letting the flashlight brightness go to 0 as a way of "locking out"
+  // the flashlight to prevent accidental use.
+  current_flashlight_brightness/=2;
+}
+
+// Forwards switch
 void selector_b_handler(BasicDebounce* button) {
   clear_stall_safety();
+  increment_flashlight_brightness();
+  set_flashlight_to_brightness();
   render_display(true);
 }
 
+// Backwards switch
 void selector_a_handler(BasicDebounce* button) {
   clear_stall_safety();
+  decrement_flashlight_brightness();
+  set_flashlight_to_brightness();
   render_display(true);
 }
 
@@ -366,11 +408,13 @@ void draw_dart(byte x, byte y) {
   
 }
 
-void render_firing_mode() {
+void render_flashlight_brightness() {
     display.setCursor(2, display.height()-3*3);
     display.setTextColor(1);
     display.setTextSize(1);
-    display.print("AUTO");
+    display.print(current_flashlight_brightness);
+    display.print("/");
+    display.print("255");
 }
 void render_display(bool force_render = false) {
   if ( stealth_status ) {
@@ -384,7 +428,7 @@ void render_display(bool force_render = false) {
     display.clearDisplay();
     render_ammo_counter();
     render_battery_indicator();
-    render_firing_mode();
+    render_flashlight_brightness();
     display.display();
   }
 }
