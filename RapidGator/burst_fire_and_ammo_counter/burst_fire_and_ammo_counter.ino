@@ -127,20 +127,24 @@ void render_display(bool force_render);
 
 uint8_t shots_fired = 0;
 
+void test_feed_delay(int initial_rev, int cool_down, int reheat) {
+
+  digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
+  delay(initial_rev);
+  digitalWrite(nchan_flywheel_mosfet_pin,LOW);
+  delay(cool_down);
+  digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
+  delay(reheat);
+  return;
+}
+
 bool is_revving = false;
 long turned_off_flywheels_at = 0;
+short feed_delay_modifier = 0;
 void block_and_rev_flywheels() {
-  // NOTE: This was done with a 43 mm cage, using blasterparts wheels + morpheus, resulting in a rather low fps set up.
-  // - 117 with elite style
-  // - ~100 with brick/waffle
-  // - 109 with accufakes
-  //
-  // This is for low fps games/side arm, atlhough in the future, I'd like to reprint a slightly lower crush cage than this, as even for UF
-  // I can go a tad higher.
-  // I wouldn't expect critical velocity to change that much, but probably worth retesting delay schedule if I change crush.
-
-  // This was tested on a storage voltage 2S, so about 3.75 per cell, and is pretty much on the edge of 
-  // supercritical. On a lower voltage battery, or even a NiMH pack, expect less than ideal, but usable, performance.
+  // NOTE: This was done with a 42 mm cage, using blasterparts wheels + morpheus, for an endwar ideal set up.
+  // - 125 FPS ave with accufakes
+  // - ~110-114 with brick tips, and probably also with waffles?
   
   if ( is_revving ) {
     // We released and depressed the trigger mid cycle, 
@@ -148,57 +152,51 @@ void block_and_rev_flywheels() {
     return;
   }
 
+  // with 200 feed delay, got ave 115, and several 118/117 readings. Also one 90 reading.
+
   /**
    * Use a snippet like this to enable easily and accurately testing
    * feed delay
-  digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
-  delay(105);
-  digitalWrite(nchan_flywheel_mosfet_pin,LOW);
-  delay(950);
-  digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
-  delay(96);
-  return;
+   * test_feed_delay(0,0,0);
+   * return;
   **/
 
   
   // Otherwise, calculate delay, rev, delay, and return;
-  // 105 is the feed delay for a fully cold shot.
-  byte feed_delay = 105; // 105 is on the edge, but as long a delay as I want to use. 
-  // Expect very slight FPS losses at low battery. seems close but still low
+  byte feed_delay = 105; // 105 just about critical at storage charge. 
+  // However, when below (7.2V vs 7.4V), expect suboptimal operation unless feed delay is manually incremented!s
   
-  if ( ( millis() - turned_off_flywheels_at) < 750 ) {
-    feed_delay = 96;
+  if ( ( millis() - turned_off_flywheels_at) < 900 ) {
+    feed_delay = 95;
   }
 
-  if ( ( millis() - turned_off_flywheels_at) < 650 ) {
-    feed_delay = 88;
-  }
-
-  if ( ( millis() - turned_off_flywheels_at) < 600 ) {
+  if ( ( millis() - turned_off_flywheels_at) < 800 ) {
     feed_delay = 85;
   }
 
-  if ( ( millis() - turned_off_flywheels_at) < 500 ) {
+  if ( ( millis() - turned_off_flywheels_at) < 700 ) {
     feed_delay = 80;
   }
 
-  if ( ( millis() - turned_off_flywheels_at) < 400 ) {
-    feed_delay = 77;
-  }
-
-  if ( ( millis() - turned_off_flywheels_at) < 300 ) {
+  if ( ( millis() - turned_off_flywheels_at) < 500 ) {
     feed_delay = 70;
   }
 
+  if ( ( millis() - turned_off_flywheels_at) < 400 ) {
+    feed_delay = 60;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 300 ) {
+    feed_delay = 40;
+  }
+
   if ( ( millis() - turned_off_flywheels_at) < 200 ) {
-    feed_delay = 55;
+    feed_delay = 30;
   }
 
   if ( ( millis() - turned_off_flywheels_at) < 100 ) {
-    // Thought this could be lower like 25, but nope, got average 74 with that!!
-    // 35 is close, but still on the low side, got some cold shots and was more 100 than 99.
-    // 40 however, IS enough!
-    feed_delay = 40;
+    // 10 too low.
+    feed_delay = 20;
   }
   if ( (millis()-turned_off_flywheels_at) < 50 ) {
     // Barely stopped revving, so barely do a delay
@@ -206,7 +204,7 @@ void block_and_rev_flywheels() {
   }
   digitalWrite(nchan_flywheel_mosfet_pin,HIGH);
   is_revving = true;
-  delay(feed_delay);
+  delay(feed_delay+feed_delay_modifier);
 }
 
 void finish_revving_flywheels() {
@@ -237,10 +235,32 @@ void set_full_auto() {
 
 bool stealth_status = false;
 bool handle_stealth_mode(BasicDebounce* button) {
-  const uint16_t hold_time = 1500; //How many MS a button must be held down to trigger the stealth mode.
+  const uint16_t hold_time = 2000; //How many MS a button must be held down to trigger the stealth mode.
   // Determine if stealth mode should changee
   if (button->time_in_state() > hold_time ) {
     stealth_status = !stealth_status;
+    return true;
+  }
+  return false;
+}
+
+constexpr byte feed_delay_change_value = 8;
+bool handle_feed_delay_increase_modifier(BasicDebounce* button) {
+   const uint16_t hold_time = 1000; //How many MS a button must be held down to trigger the stealth mode.
+  // Determine if stealth mode should change
+  if (button->time_in_state() > hold_time ) {
+    feed_delay_modifier += feed_delay_change_value;
+    return true;
+  }
+  return false;
+}
+
+
+bool handle_feed_delay_decrease_modifier(BasicDebounce* button) {
+   const uint16_t hold_time = 1000; //How many MS a button must be held down to trigger the stealth mode.
+  // Determine if stealth mode should change
+  if (button->time_in_state() > hold_time ) {
+    feed_delay_modifier -= feed_delay_change_value;
     return true;
   }
   return false;
@@ -316,11 +336,13 @@ void selector_a_handler(BasicDebounce* button) {
 
 void selector_a_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
+  if ( handle_feed_delay_decrease_modifier(button) ) { return; }
   selector_a_handler(button);
 }
 
 void selector_b_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
+  if ( handle_feed_delay_increase_modifier(button) ) { return; }
   selector_b_handler(button);
 }
 
@@ -487,6 +509,11 @@ void render_battery_indicator() {
   }
 }
 
+void render_feed_delay_modifier() {
+  display.setCursor(1,display.height()-3*3);
+  display.print("FDM:");
+  display.print(feed_delay_modifier);
+}
 
 const uint8_t flashlightImageWidth = 12;
 const uint8_t flashlightImageHeight = 5;
@@ -578,6 +605,7 @@ void render_display(bool force_render = false) {
     render_ammo_counter();
     render_battery_indicator();
     render_flashlight_brightness();
+    render_feed_delay_modifier();
     display.display();
   }
 }
