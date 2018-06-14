@@ -161,6 +161,12 @@ void block_and_rev_flywheels() {
    * return;
   **/
 
+    // Note!! I realized a major mistake I've been making! I haven't been including pusher time when testing feed delays!
+  // This means that when we cool down and then reheat to see if the shot is still hot, we aren't fully revved!
+  //  That means all the FDs can be much lower/longer.
+  // I should go back and correct this mistake for the rapid gator!
+
+
   
   // Otherwise, calculate delay, rev, delay, and return;
   byte feed_delay = 105; // 105 just about critical at storage charge. 

@@ -156,66 +156,36 @@ bool is_revving = false;
 long turned_off_flywheels_at = 0;
 short feed_delay_modifier = 0;
 void block_and_rev_flywheels() {
-  // NOTE: This was done with a 42 mm cage, using blasterparts wheels + morpheus, for an endwar ideal set up.
-  // - 125 FPS ave with accufakes
-  // - ~110-114 with brick tips, and probably also with waffles?
-  
   if ( is_revving ) {
     // We released and depressed the trigger mid cycle, 
     // we never stopped firing, this was alreay ran, take no action.
     return;
   }
 
-  // with 200 feed delay, got ave 115, and several 118/117 readings. Also one 90 reading.
 
   /**
    * Use a snippet like this to enable easily and accurately testing
    * feed delay
-   * test_feed_delay(0,0,0);
-   * return;
-  **/
-
+   * 
+    test_feed_delay(200,1200,60); // 1200 good
+    return;
+    */
+    
+  // This schedule is for the 9.5mm gap turnigy 2350 wheels, printed 20% rectilinear, 3 perims, 4 tops/bottoms.
   
   // Otherwise, calculate delay, rev, delay, and return;
-  byte feed_delay = 105; // 105 just about critical at storage charge. 
-  // However, when below (7.2V vs 7.4V), expect suboptimal operation unless feed delay is manually incremented!s
-  
-  if ( ( millis() - turned_off_flywheels_at) < 900 ) {
-    feed_delay = 95;
-  }
+  byte feed_delay = 85; // 90 is fast enough!! 80 is very borderline on the 850mah pack @ 14.7V. 85 seems good.
 
-  if ( ( millis() - turned_off_flywheels_at) < 800 ) {
-    feed_delay = 85;
-  }
-
-  if ( ( millis() - turned_off_flywheels_at) < 700 ) {
-    feed_delay = 80;
-  }
-
-  if ( ( millis() - turned_off_flywheels_at) < 500 ) {
-    feed_delay = 70;
-  }
-
-  if ( ( millis() - turned_off_flywheels_at) < 400 ) {
+  if ( (millis()-turned_off_flywheels_at) < 1200 ) {
+    // 300 good! 1200 seems closer to the edge, but considering this is worst case, it's good!
     feed_delay = 60;
-  }
+  } 
 
-  if ( ( millis() - turned_off_flywheels_at) < 300 ) {
-    feed_delay = 40;
-  }
-
-  if ( ( millis() - turned_off_flywheels_at) < 200 ) {
-    feed_delay = 30;
-  }
-
-  if ( ( millis() - turned_off_flywheels_at) < 100 ) {
-    // 10 too low.
-    feed_delay = 20;
-  }
-  if ( (millis()-turned_off_flywheels_at) < 50 ) {
+  
+  if ( (millis()-turned_off_flywheels_at) < 150 ) {
     // Barely stopped revving, so barely do a delay
-    feed_delay = 12.5;
-  }
+    feed_delay = 30;
+  } 
   enable_flywheels(true);
   is_revving = true;
   delay(feed_delay+feed_delay_modifier);
@@ -523,14 +493,22 @@ void render_battery_indicator() {
   display.setCursor(13, 2);
   display.setTextColor(1);
   display.setTextSize(1);
- // display.print(voltage_to_disp);
-  display.print(voltage_to_print/100);
+
+  // Per cell voltage guess
+  display.print((voltage_to_print/4)/100);
   display.print('.');
-  display.print(voltage_to_print%100);
+  display.print((voltage_to_print/4)%100);
   display.print('V');
   if ( pusher_was_stalled ) {
     display.print('S');
   }
+
+  // Overall voltage
+  display.setCursor(90, 2);
+  display.print(voltage_to_print/100);
+  display.print('.');
+  display.print(voltage_to_print%100);
+  display.print('V');
   
 }
 
