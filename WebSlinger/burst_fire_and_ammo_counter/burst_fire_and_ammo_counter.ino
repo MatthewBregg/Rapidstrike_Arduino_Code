@@ -223,6 +223,10 @@ bool handle_stealth_mode(BasicDebounce* button) {
   // Determine if stealth mode should changee
   if (button->time_in_state() > hold_time ) {
     stealth_status = !stealth_status;
+    if (!stealth_status) {
+      // When exiting stealth mode, instantly render the display
+      render_display(true);
+    }
     return true;
   }
   return false;
@@ -320,13 +324,19 @@ void selector_a_handler(BasicDebounce* button) {
 
 void selector_a_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_feed_delay_decrease_modifier(button) ) { return; }
+  if ( handle_feed_delay_decrease_modifier(button) ) { 
+    render_display(true); 
+    return;
+  }
   selector_a_handler(button);
 }
 
 void selector_b_release_handler(BasicDebounce* button) {
   if ( handle_stealth_mode(button) ) { return; }
-  if ( handle_feed_delay_increase_modifier(button) ) { return; }
+  if ( handle_feed_delay_increase_modifier(button) ) { 
+    render_display(true); 
+    return; 
+  }
   selector_b_handler(button);
 }
 
@@ -334,6 +344,15 @@ void setup_fs_buttons() {
 
   selector_a.set_released_command(&selector_a_release_handler);
   selector_b.set_released_command(&selector_b_release_handler);
+}
+
+void magazine_change_render_display(BasicDebounce* button) {
+  render_display(true);
+}
+
+void set_up_magazine_release_to_render_display() {
+  magazine_in.set_pressed_command(&magazine_change_render_display);
+  magazine_in.set_released_command(&magazine_change_render_display);
 }
 
 
@@ -616,7 +635,9 @@ void retract_pusher_if_mag_out() {
 void loop() {
   pusher_safety_shutoff();
   update_buttons();
-  render_display();
+  if ( millis()%10000 ) {
+    render_display();
+  }
   retract_pusher_if_mag_out();
 }
 
