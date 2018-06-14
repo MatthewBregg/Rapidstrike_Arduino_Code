@@ -75,8 +75,8 @@ void clear_stall_safety() {
 }
 void enable_flywheels(bool rev) {
     if (pusher_was_stalled) {
+      rev = false;
       // Don't rev if we are in a pusher crush state!
-      return;
     }
     if(rev){
       //start flywheels
@@ -641,9 +641,5 @@ void loop() {
     render_display();
   }
   retract_pusher_if_mag_out();
-
-  if ( pusher_was_stalled ) {
-    finish_revving_flywheels();
-  }
 }
 
