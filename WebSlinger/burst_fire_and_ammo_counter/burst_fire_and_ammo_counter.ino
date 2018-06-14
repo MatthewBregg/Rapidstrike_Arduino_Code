@@ -223,10 +223,7 @@ bool handle_stealth_mode(BasicDebounce* button) {
   // Determine if stealth mode should changee
   if (button->time_in_state() > hold_time ) {
     stealth_status = !stealth_status;
-    if (!stealth_status) {
-      // When exiting stealth mode, instantly render the display
-      render_display(true);
-    }
+    render_display(false);
     return true;
   }
   return false;
@@ -270,7 +267,7 @@ bool handle_flashlight(BasicDebounce* button) {
       // Turn off flashlight by setting the PWM cycle to 0% duty.
       analogWrite(flashlight_pin, 0);
     }
-
+    render_display(false);
     return true;
 }
 
@@ -434,6 +431,9 @@ void setup()   {
   // Set up fire_select buttons
   setup_fs_buttons();
 
+  // Have the mag release forcibly rerender the display
+  set_up_magazine_release_to_render_display();
+
   // Set up the cycle handler
   cycler.set_pressed_command(&handle_pusher_retract);
 
@@ -442,7 +442,9 @@ void setup()   {
 
   // Set up the rev switch to toggle the flashlight
   rev_switch_button.set_pressed_command(&handle_flashlight);
-  
+
+  // Render at boot to avoid the adafruit logo sticking around!
+  render_display(false);
 }
 
 float calculate_voltage() {
