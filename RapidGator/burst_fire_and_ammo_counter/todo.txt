@@ -1,0 +1,2 @@
+refine feed delay to account for pusher delay
+ensure flywheels stop turning in event of stall!

@@ -641,5 +641,9 @@ void loop() {
     render_display();
   }
   retract_pusher_if_mag_out();
+
+  if ( pusher_was_stalled ) {
+    finish_revving_flywheels();
+  }
 }
 
