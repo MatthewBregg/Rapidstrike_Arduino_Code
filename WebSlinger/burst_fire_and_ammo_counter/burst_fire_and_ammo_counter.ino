@@ -635,7 +635,7 @@ void retract_pusher_if_mag_out() {
 void loop() {
   pusher_safety_shutoff();
   update_buttons();
-  if ( millis()%10000 ) {
+  if ( millis()%10000 == 0 ) {
     render_display();
   }
   retract_pusher_if_mag_out();
