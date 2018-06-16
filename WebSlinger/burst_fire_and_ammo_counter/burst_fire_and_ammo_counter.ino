@@ -174,7 +174,7 @@ void block_and_rev_flywheels() {
   // This schedule is for the 9.5mm gap turnigy 2350 wheels, printed 20% rectilinear, 3 perims, 4 tops/bottoms.
   
   // Otherwise, calculate delay, rev, delay, and return;
-  byte feed_delay = 85; // 90 is fast enough!! 80 is very borderline on the 850mah pack @ 14.7V. 85 seems good.
+  byte feed_delay = 101; // 90 is fast enough!! 80 is very borderline on the 850mah pack @ 14.7V. 85 seems good.
 
   if ( (millis()-turned_off_flywheels_at) < 1200 ) {
     // 300 good! 1200 seems closer to the edge, but considering this is worst case, it's good!
@@ -518,7 +518,11 @@ void render_battery_indicator() {
   // Per cell voltage guess
   display.print((voltage_to_print/4)/100);
   display.print('.');
-  display.print((voltage_to_print/4)%100);
+  byte decimal = (voltage_to_print/4)%100;
+  if ( decimal < 10 ) {
+    display.print('0');
+  }
+  display.print(decimal);
   display.print('V');
   if ( pusher_was_stalled ) {
     display.print('S');
@@ -528,7 +532,11 @@ void render_battery_indicator() {
   display.setCursor(90, 2);
   display.print(voltage_to_print/100);
   display.print('.');
-  display.print(voltage_to_print%100);
+  decimal = voltage_to_print%100;
+  if ( decimal < 10 ) {
+    display.print('0');
+  }
+  display.print(decimal);
   display.print('V');
   
 }

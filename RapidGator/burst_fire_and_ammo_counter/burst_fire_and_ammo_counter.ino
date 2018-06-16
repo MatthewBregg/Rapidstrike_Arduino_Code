@@ -508,7 +508,11 @@ void render_battery_indicator() {
   display.setTextSize(1);
   display.print(voltage_to_print/10);
   display.print('.');
-  display.print(voltage_to_print%10);
+  byte decimal = voltage_to_print%100;
+  if ( decimal < 10 ) {
+    display.print('0');
+  }
+  display.print(decimal);
   display.print('V');
   if ( pusher_was_stalled ) {
     display.print('S');
