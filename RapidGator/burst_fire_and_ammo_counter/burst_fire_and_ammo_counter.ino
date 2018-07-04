@@ -38,6 +38,7 @@ const int nchan_flywheel_mosfet_pin = A5;
 
 //These switches are active_low, aka, switch closed == low.
 const int trigger_switch = 4;
+const int voltimeter_pin = A3;
 const int other_trigger_switch = 1;
 const int cycle_switch = 5;
 const int rev_switch = 8;
@@ -169,7 +170,8 @@ void block_and_rev_flywheels() {
 
   
   // Otherwise, calculate delay, rev, delay, and return;
-  byte feed_delay = 105; // 105 just about critical at storage charge. 
+  short feed_delay = 145; // -8 Still works pretty well, perhaps a tiny bit more cold shots. // -16 same, cold shots like 1/5?
+  // Could prob reduce at least -8 on storage voltage +, but to be on safe side, just go to 145.
   // However, when below (7.2V vs 7.4V), expect suboptimal operation unless feed delay is manually incremented!s
   
   if ( ( millis() - turned_off_flywheels_at) < 900 ) {
@@ -443,16 +445,22 @@ void setup()   {
 
 
 float calculate_voltage() {
-//http://www.electroschematics.com/9351/arduino-digital-voltmeter/
-  const float R1 = 75000.0; // resistance of R1 (75K) -see text!
-  const float R2 = 10000.0; // resistance of R2 (10K) - see text!
-  float value = analogRead(A3);
+  //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
+  //R1 = 67750.0;  -see text!
+  //R2 =  9970.0;  -see text!
+   // Instead of dividing, 
+  // used a voltimeter to measure at the analog read point, 
+  // and then divided the actual bat voltage by the reading to get the multiplier,
+  // which is then hardcoded in.
+  float value = analogRead(voltimeter_pin);
   float vout = (value * 5.0) / 1024.0; // see text
-  float vin = vout / (R2/(R1+R2)); 
+  // Our reading was (vin/vout) = 15.42/1.955
+  float vin = vout * 8.65;
   if (vin<0.09) {
     vin=0.0;//statement to quash undesired reading !
   }
   return vin;
+  
 }
 
 float voltage_to_disp = 0.0;
@@ -480,14 +488,15 @@ void render_ammo_counter() {
 
 
 void render_battery_indicator() {
-  const float battery_min_voltage = 7.0;
-  const float battery_full_voltage = 8.4;
+  constexpr byte num_of_cells = 2;
+  constexpr float battery_min_voltage = 3.4*num_of_cells;
+  constexpr float battery_full_voltage = 4.2*num_of_cells;
   static int battery_percentage = 0;
-  static byte voltage_to_print = 0; // Doing this to avoid float operations every single display update when printing, probably not needed though.
+  static short voltage_to_print = 0; // Doing this to avoid float operations every single display update when printing, probably not needed though.
   // First handle updating voltage reading if enough time has passed!
     if ( millis() - last_updated_voltage_at > 512 || last_updated_voltage_at == 0 ) {
-      voltage_to_disp = calculate_voltage();
-      voltage_to_print = voltage_to_disp*10;
+      float voltage_to_disp = calculate_voltage();
+      voltage_to_print = voltage_to_disp*100;
       last_updated_voltage_at = millis();
       // Max voltage will be considered to be 8.4, and min will be 7.0 (limit of regulator, and close limit of safe lipo usage.) If using this code with a different battery, 
       // change these constants if you want an accurate battery meter!!
@@ -498,17 +507,19 @@ void render_battery_indicator() {
     }
 
   // hard code in a battery icon.
-  display.drawRect(7,3,3,2,1);
-  display.drawRect(3,5,11,20,1);
-  display.fillRect(3,5,11,20-battery_percentage,1);
+  display.drawRect(4,3,3,2,1);
+  display.drawRect(0,5,11,20,1);
+  display.fillRect(0,5,11,20-battery_percentage,1);
   
   // Now add a voltage display.
-  display.setCursor(17, 2);
+  display.setCursor(13, 2);
   display.setTextColor(1);
   display.setTextSize(1);
-  display.print(voltage_to_print/10);
+
+  // Per cell voltage guess
+  display.print((voltage_to_print/num_of_cells)/100);
   display.print('.');
-  byte decimal = voltage_to_print%100;
+  byte decimal = (voltage_to_print/num_of_cells)%100;
   if ( decimal < 10 ) {
     display.print('0');
   }
@@ -517,6 +528,18 @@ void render_battery_indicator() {
   if ( pusher_was_stalled ) {
     display.print('S');
   }
+
+  // Overall voltage
+  display.setCursor(90, 2);
+  display.print(voltage_to_print/100);
+  display.print('.');
+  decimal = voltage_to_print%100;
+  if ( decimal < 10 ) {
+    display.print('0');
+  }
+  display.print(decimal);
+  display.print('V');
+  
 }
 
 void render_feed_delay_modifier() {
@@ -525,15 +548,6 @@ void render_feed_delay_modifier() {
   display.print(feed_delay_modifier);
 }
 
-const uint8_t flashlightImageWidth = 12;
-const uint8_t flashlightImageHeight = 5;
-
-const unsigned char flashlightImage [] PROGMEM=
-  {
-
-  0xfc, 0x80, 0x2f, 0x76, 0x80, 0x2f, 0xfc, 0x8f
-  
-  };
 void render_flashlight_brightness() {
     display.setCursor(104, display.height()-3*3);
     display.setTextColor(1);

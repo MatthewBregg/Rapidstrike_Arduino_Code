@@ -488,8 +488,9 @@ void render_ammo_counter() {
 }
 
 void render_battery_indicator() {
-  constexpr float battery_min_voltage = 3.4*4;
-  constexpr float battery_full_voltage = 4.2*4;
+  constexpr byte num_of_cells = 4;
+  constexpr float battery_min_voltage = 3.4*num_of_cells;
+  constexpr float battery_full_voltage = 4.2*num_of_cells;
   static int battery_percentage = 0;
   static short voltage_to_print = 0; // Doing this to avoid float operations every single display update when printing, probably not needed though.
   // First handle updating voltage reading if enough time has passed!
@@ -516,9 +517,9 @@ void render_battery_indicator() {
   display.setTextSize(1);
 
   // Per cell voltage guess
-  display.print((voltage_to_print/4)/100);
+  display.print((voltage_to_print/num_of_cells)/100);
   display.print('.');
-  byte decimal = (voltage_to_print/4)%100;
+  byte decimal = (voltage_to_print/num_of_cells)%100;
   if ( decimal < 10 ) {
     display.print('0');
   }

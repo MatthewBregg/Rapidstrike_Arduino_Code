@@ -1,0 +1,7 @@
+// Otherwise, calculate delay, rev, delay, and return;
+  short feed_delay = 145; // -8 Still works pretty well, perhaps a tiny bit more cold shots. // -16 same, cold shots like 1/5?
+  // Could prob reduce at least -8 on storage voltage +, but to be on safe side, just go to 145.
+  // However, when below (7.2V vs 7.4V), expect suboptimal operation unless feed delay is manually incremented!s
+
+
+
