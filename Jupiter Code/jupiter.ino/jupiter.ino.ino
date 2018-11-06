@@ -33,6 +33,7 @@ long last_turned_down_flywheels = 0;
 void InitFiring() {
     const int FD_STAGE_1 = 1000;
     const int FD_STAGE_2 = 500;
+    const int FD_STAGE_3 = 250;
     const long millis_since_rev = millis() - last_turned_down_flywheels;
     // Rev
     digitalWrite(flywheel_mosfet,HIGH); // Rev
@@ -42,7 +43,13 @@ void InitFiring() {
       // 85 Is good!
       delay(85); // FD_STAGE_1 delay, revved within FD_STAGE_1 ms
     } else if (millis_since_rev < FD_STAGE_2) {
-      delay(65); // FD_STAGE_2 delay, revved within 500 MS
+      // 65 Got us 91-95 on a 7.6 V NIMH
+      // 75 Good!
+      delay(75); // FD_STAGE_2 delay, revved within FD_STAGE_2 MS
+    } else if (millis_since_rev < FD_STAGE_3) {
+      // 65 Got high readings, ~100
+      // Did not test below 65, that's quick enough!
+      delay(65); // FD_STAGE_3 delay, revved within FD_STAGE_3 MS.
     } else {
       // 6.6 V NIMH
       // 150 works! (97/98/99/100).
@@ -108,14 +115,6 @@ void FireBlaster() {
     InitFiring();
     RepeatCycle();
     FinishFiring();
-    // For testing FD
-    delay(995);
-    InitFiring();
-    RepeatCycle();
-    FinishFiring();
-    // For testing FD
-   
-    
 }
 
 void loop() {
