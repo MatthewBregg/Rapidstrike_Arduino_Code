@@ -63,6 +63,7 @@ void RepeatCycle() {
     // - Then continue firing until the user releases the trigger. 
     // - If no balls are loaded/a jam occurs, allow the user to cancel firing.
     //   - For this, fall back to the trigger if 1 second goes by with no balls. 
+    // - Lastly, attempt to end with the cycle switch open. However, again use the FIRE_TIMEOUT in case of jams. 
     while(true) {
       UpdateButtons();
       bool current_switch_reading = cycle.query();
@@ -76,7 +77,14 @@ void RepeatCycle() {
         do {
           UpdateButtons();
         } while (trigger.query());
-        // The user has released the trigger, fall out of this loop and allow the firing cycles to end. 
+        
+        const long time_started = millis();
+        // Attempt to let the cycle switch go open, but don't do this for more than FIRE_TIMEOUT
+        do {
+          UpdateButtons();
+        } while ( cycle.query() && (millis()-time_started) < FIRE_TIMEOUT );
+
+        // User release trigger, cycle switch reset or was jammed, Fin.
         break;
       }
       
@@ -87,7 +95,6 @@ void RepeatCycle() {
 // Turn down the pusher and flywheels. 
 void FinishFiring() {
    digitalWrite(pusher_bjt,LOW); // Stop pushing
-   delay(100); // In case of follow ups
    digitalWrite(flywheel_mosfet,LOW); // Stop the wheels
    last_turned_down_flywheels = millis();
 }
