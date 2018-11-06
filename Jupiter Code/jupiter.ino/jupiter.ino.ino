@@ -26,34 +26,76 @@ void UpdateButtons() {
   cycle.update();
 }
 
-void FireBlaster() {
+// In MS, when did we last stop the flywheels?
+long last_turned_down_flywheels = 0;
+
+// Rev the flywheels, handle the FD, and then start the pusher.
+void InitFiring() {
+    const int FD_STAGE_1 = 1000;
+    const int FD_STAGE_2 = 500;
+    const long millis_since_rev = millis() - last_turned_down_flywheels;
     // Rev
     digitalWrite(flywheel_mosfet,HIGH); // Rev
-    delay(180); // Feed Delay
+    // Delay
+    if (millis_since_rev < FD_STAGE_1 ) {
+      delay(100); // FD_STAGE_1 delay, revved within FD_STAGE_1 ms
+    } else if (millis_since_rev < FD_STAGE_2) {
+      delay(100); // FD_STAGE_2 delay, revved within 500 MS
+    } else {
+      // 150 works! (97/98/99/100).
+      // 112 marginally good? (95-100 AVE)
+      // 102 marginally too low. (90-93 AVE)
+      // 93 too Low
+      delay(112); // Full Feed Delay. Have not revved recently. 
+    }
+    // Fire and exit.
     digitalWrite(pusher_bjt,HIGH); // Start pushing
-    
-    bool prior_switch_reading = cycle.query(); 
-    long started_at = millis();
+}
 
-    // Wait for the switch to encounter a falling edge
+// Repeat cycling until we are done firing, then return. 
+void RepeatCycle() {
+   const int FIRE_TIMEOUT = 1000;
+   bool prior_switch_reading = cycle.query(); 
+   long started_at = millis();
+
+    // Overall we want to
+    // - Ensure a single ball is fired
+    // - Then continue firing until the user releases the trigger. 
+    // - If no balls are loaded/a jam occurs, allow the user to cancel firing.
+    //   - For this, fall back to the trigger if 1 second goes by with no balls. 
     while(true) {
       UpdateButtons();
       bool current_switch_reading = cycle.query();
       // If we have either gotten our cycle off successfully, or it's been a second with no
       // firing (assume empty/jam), fall back to trigger for ending cycle. 
-      if ( !current_switch_reading && prior_switch_reading || millis() - started_at > 1000) {
+      // TLDR; Wait for the cycle switch to fall, or if that doesn't occur in the FIRE_TIMEOUT
+      // period, delegate to the user via the trigger.
+      if ( !current_switch_reading && prior_switch_reading || millis() - started_at > FIRE_TIMEOUT) {
+        // At this point, the user directly controls when the cycle ends via the trigger. 
+        // This occurs when either a ball is fired, or we hit FIRE_TIMEOUT and assume JAM/OUTOFAMMO. 
         do {
           UpdateButtons();
         } while (trigger.query());
-        // We have fired at least one ball (or detected a jam, and trigger is no longer held down. 
-        // End firing cycle.
+        // The user has released the trigger, fall out of this loop and allow the firing cycles to end. 
         break;
       }
+      
       prior_switch_reading = current_switch_reading;
     }
-    digitalWrite(pusher_bjt,LOW); // Stop pushing
-    delay(100); // In case of follow ups
-    digitalWrite(flywheel_mosfet,LOW); // Stop the wheels
+}
+
+// Turn down the pusher and flywheels. 
+void FinishFiring() {
+   digitalWrite(pusher_bjt,LOW); // Stop pushing
+   delay(100); // In case of follow ups
+   digitalWrite(flywheel_mosfet,LOW); // Stop the wheels
+   last_turned_down_flywheels = millis();
+}
+
+void FireBlaster() {
+    InitFiring();
+    RepeatCycle();
+    FinishFiring();
 }
 
 void loop() {
