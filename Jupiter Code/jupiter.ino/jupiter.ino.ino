@@ -38,15 +38,20 @@ void InitFiring() {
     digitalWrite(flywheel_mosfet,HIGH); // Rev
     // Delay
     if (millis_since_rev < FD_STAGE_1 ) {
-      delay(100); // FD_STAGE_1 delay, revved within FD_STAGE_1 ms
+      // 75 too low on 7.6 V NiMH. 
+      // 85 Is good!
+      delay(85); // FD_STAGE_1 delay, revved within FD_STAGE_1 ms
     } else if (millis_since_rev < FD_STAGE_2) {
-      delay(100); // FD_STAGE_2 delay, revved within 500 MS
+      delay(65); // FD_STAGE_2 delay, revved within 500 MS
     } else {
+      // 6.6 V NIMH
       // 150 works! (97/98/99/100).
       // 112 marginally good? (95-100 AVE)
       // 102 marginally too low. (90-93 AVE)
       // 93 too Low
-      delay(112); // Full Feed Delay. Have not revved recently. 
+      // 7.6 V NIMH
+      // 102 Marginally good ( 96 AVE)
+      delay(105); // Full Feed Delay. Have not revved recently. 
     }
     // Fire and exit.
     digitalWrite(pusher_bjt,HIGH); // Start pushing
@@ -103,6 +108,14 @@ void FireBlaster() {
     InitFiring();
     RepeatCycle();
     FinishFiring();
+    // For testing FD
+    delay(995);
+    InitFiring();
+    RepeatCycle();
+    FinishFiring();
+    // For testing FD
+   
+    
 }
 
 void loop() {
