@@ -1,0 +1,55 @@
+  byte feed_delay = 105; // 105 is on the edge, but as long a delay as I want to use. 
+  // Expect very slight FPS losses at low battery. seems close but still low
+  
+  if ( ( millis() - turned_off_flywheels_at) < 750 ) {
+    feed_delay = 96;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 650 ) {
+    feed_delay = 88;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 600 ) {
+    feed_delay = 85;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 500 ) {
+    feed_delay = 80;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 400 ) {
+    feed_delay = 77;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 300 ) {
+    feed_delay = 70;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 200 ) {
+    feed_delay = 55;
+  }
+
+  if ( ( millis() - turned_off_flywheels_at) < 100 ) {
+    // Thought this could be lower like 25, but nope, got average 74 with that!!
+    // 35 is close, but still on the low side, got some cold shots and was more 100 than 99.
+    // 40 however, IS enough!
+    feed_delay = 40;
+  }
+  if ( (millis()-turned_off_flywheels_at) < 50 ) {
+    // Barely stopped revving, so barely do a delay
+    feed_delay = 12.5;
+  }
+
+
+
+
+
+Rapidgator overall FPS readings with 43 blasterparts morpheus
+
+- 117 with elite style
+- ~100 with brick/waffle
+- 109 with accufakes
+
+Can increase crush one more notch to bring them more up, adding larger wheels would put me over with elite for sure, and be on the edge for some shots at uf, but for 130 end war would prob be fine.
+
+As a good low velocity, sub 120 FPS blaster that leaves no questions, I'm fine with it for now, will make cage swappable though via bullets.
