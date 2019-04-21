@@ -34,11 +34,12 @@ Adafruit_SSD1306 display(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 /* End Oled Display PreProcessor stuff */
 
 const int cycle_switch = A1;
+const int other_cycle_switch = A3;
 const int mag_switch = 8;
 const int voltimeter_pin = A0;
 /* End the section on pins */
 
-BasicDebounce cycler = BasicDebounce(cycle_switch,15);
+BasicDebounce cycler = BasicDebounce(cycle_switch,5);
 BasicDebounce magazine_in = BasicDebounce(mag_switch,50);
 
 void update_buttons() {
@@ -52,9 +53,13 @@ uint8_t shots_fired = 0;
 
 void magazine_change_render_display(BasicDebounce* button) {
   render_display();
+  shots_fired = 0;
 }
 
+// Wait until millis is >= than this to refresh.
+long refresh_after = 0;
 void increment_shots_fired(BasicDebounce* button) {
+  refresh_after = millis() + 200;
   ++shots_fired;
 }
 
@@ -77,7 +82,7 @@ void setup()   {
   // internally, this will display the splashscreen.
   display.display();
   delay(100); 
-  display.setRotation(0); //rotate display
+  display.setRotation(2); //rotate display
   //Display setup end
   // ----------------------------------------
 
@@ -88,6 +93,7 @@ void setup()   {
   // Switch inputs
   //---------------------------------------
   pinMode(cycle_switch, INPUT_PULLUP);
+  pinMode(other_cycle_switch,INPUT_PULLUP);
   pinMode(mag_switch, INPUT_PULLUP);
 
   //---------------------------------------
@@ -100,6 +106,7 @@ void setup()   {
   // Have the mag release forcibly rerender the display
   set_up_magazine_release_to_render_display();
 
+  cycler.AddSecondaryPin(other_cycle_switch);
   // Set up the cycle handler
   cycler.set_pressed_command(&increment_shots_fired);
 
@@ -208,7 +215,7 @@ void render_display() {
 
 void loop() {
   update_buttons();
-  if ( millis()%1000 == 0 ) {
+  if ( millis()%500 == 0 && millis() >= refresh_after) {
     render_display();
   }
 }
