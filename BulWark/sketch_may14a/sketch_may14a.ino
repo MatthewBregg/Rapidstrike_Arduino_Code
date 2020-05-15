@@ -174,14 +174,6 @@ float calculate_voltage() {
   
 }
 
-float get_motor_speed_factor() {
-  float value = 11.0/calculate_voltage();
-  if ( value < 1 ) {
-    return value;
-  }
-  return 1;
-  
-}
 
 
 // In MS, when did we last stop the flywheels?
@@ -194,8 +186,8 @@ void InitFiring() {
     const int FD_STAGE_3 = 250;
     const long millis_since_rev = millis() - last_turned_down_flywheels;
     // Rev
-    OCR1B = 500; //go
-    OCR1A = 500;
+   // OCR1B = 500; //go
+    //OCR1A = 500;
     // Delay
     if (millis_since_rev < FD_STAGE_1 ) {
       
@@ -211,23 +203,33 @@ void InitFiring() {
     }
 }
 
-long started_pusher = 0;
-long found_cycle_at = 0;
-const long pusher_timeout = 1000;
+
+float get_motor_speed_factor() {
+  float value = 11.0/calculate_voltage();
+  if ( value < 1 ) {
+    return value;
+  }
+  return 1;
+  
+}
+float get_slow_motor_speed_factor() {
+  float value = 6.0/calculate_voltage();
+  if ( value < 1 ) {
+    return value;
+  }
+  return 1;
+  
+}
+const long pusher_timeout = 100;
 void set_pusher(bool on) {
   if (on) {
-    started_pusher = millis();
     analogWrite(3,255.0*get_motor_speed_factor());
   } else {
     analogWrite(3,0);
   }
 }
 
-void check_for_cycle() {
-  if (pusher_retracted()) {
-    found_cycle_at = millis();
-  }
-}
+
 bool pusher_retracted() {
   return !digitalRead(4) && digitalRead(5);
 }
@@ -244,7 +246,8 @@ void wait_for_trigger_release() {
 }
 
 void loop(){
-  
+
+
   if(firstRun) {
     ////continue startup
     selftest();
@@ -279,6 +282,9 @@ void loop(){
          shutoff_flywheels();
          wait_for_trigger_release();
          return;
+      }  else if ( cycle_status != pusher_retracted() ) {
+        cycle_status = pusher_retracted();
+        cycle_hit = millis();
       }
     }
     cycle_status = pusher_retracted();
@@ -296,15 +302,16 @@ void loop(){
          shutoff_flywheels();
          wait_for_trigger_release();
          return;
-      } else {
+      } else if ( cycle_status != pusher_retracted() ) {
         cycle_status = pusher_retracted();
         cycle_hit = millis();
       }
      }
-    
+     // Slow the pusher down for easier homing.
+    //analogWrite(3,255.0*get_slow_motor_speed_factor());
     while(!pusher_retracted()) {
        // Delay until the pusher is settled.
-        // Also handle any pusher stalls;
+      // Also handle any pusher stalls;
       if (pusher_retracted() == cycle_status && (millis()-cycle_hit)> pusher_timeout) {
         // No change in pusher status for timeout, STALL. 
         // Stop everything, pause for a second, 
@@ -313,6 +320,9 @@ void loop(){
          shutoff_flywheels();
          wait_for_trigger_release();
          return;
+      } else if ( cycle_status != pusher_retracted() ) {
+        cycle_status = pusher_retracted();
+        cycle_hit = millis();
       }
     }
     // And now stop the pusher.
