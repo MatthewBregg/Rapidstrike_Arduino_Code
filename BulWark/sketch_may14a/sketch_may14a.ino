@@ -139,7 +139,7 @@ void setup(){
   OCR1B = 230; //write 920us low throttle
 
   // Set the pusher motor PWM frequency to be 31K
-  TCCR2B = TCCR2B & B11111000 | B00000001; 
+ // TCCR2B = (TCCR2B & B11111000) | B00000001; 
   
   //pin 3: Pusher Motor
   pinMode(3, OUTPUT);
@@ -147,14 +147,45 @@ void setup(){
   pinMode(4, INPUT_PULLUP);
   pinMode(5, INPUT_PULLUP);
 
+  pinMode(A5, INPUT);
   // We use A3 as a gnd. 
   pinMode(A3, OUTPUT);
   digitalWrite(A3, LOW);
- 
+ //Serial.begin(9600);
  
 }
 
+float calculate_voltage() {
+  //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
+   constexpr double  R1 = 68200.0; // -see text!
+   constexpr double R2 =  9850.0; // -see text!
+   constexpr double multiplier = (R2/(R1+R2));
+   // Instead of dividing, 
+  // used a voltimeter to measure at the analog read point, 
+  // and then divided the actual bat voltage by the reading to get the multiplier,
+  // which is then hardcoded in.
+  float value = analogRead(A5);
+  float vout = (value * 5.0) / 1024.0; // see text
+  float vin = vout / multiplier; // 8.65;
+  if (vin<0.09) {
+    vin=0.0;//statement to quash undesired reading !
+  }
+  return vin;
+  
+}
+
+float get_motor_speed_factor() {
+  float value = 11.0/calculate_voltage();
+  if ( value < 1 ) {
+    return value;
+  }
+  return 1;
+  
+}
+
+
 void loop(){
+  
   if(firstRun) {
     ////continue startup
     selftest();
@@ -167,7 +198,6 @@ void loop(){
     //clear flag
     firstRun = 0;
   }
-  
   //initial debounce on trigger from idle state. Safety measure.
   prevTrigState = currTrigState;
   currTrigState = (digitalRead(11) && !digitalRead(12));
@@ -178,19 +208,20 @@ void loop(){
     //wait for motor acceleration per delay schedule
     // delay(feedDelayBase - delayReduction);
     delay(200);
+    float pusher_speed = get_motor_speed_factor(); 
     //now that we will have just fired, apply recent shot comp
     //  delayReduction = recentShotCompensation;
     //  fire();
-    analogWrite(3,255.0*.75);
+    analogWrite(3,255.0*pusher_speed);
     //first sealed-in shot is over. Check trigger *quickly* for downness, fire again and again while down.
     while((PINB & 0b00001000) && !(PINB & 0b00010000)){
        delay(1);
     }
-  } else {
-    while(digitalRead(4) && !digitalRead(5)) {
+     while(digitalRead(4) && !digitalRead(5)) {
        // Delay until the pusher is settled.
     }
     analogWrite(3,0);
+  } else {
     OCR1B = 230; //shutdown
     OCR1A = 230;
   }
