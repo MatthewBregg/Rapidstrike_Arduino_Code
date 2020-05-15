@@ -217,6 +217,9 @@ float get_motor_speed_factor() {
 const long pusher_timeout = 800;
 void set_pusher(bool on) {
   if (on) {
+    // If we want to try lower speeds, uncomment the below so the relay can flip.
+    // analogWrite(3,255);
+    //delay(20);
     analogWrite(3,255.0*get_motor_speed_factor());
   } else {
     analogWrite(3,0);
@@ -282,7 +285,7 @@ void loop(){
     cycle_status = pusher_retracted();
     cycle_hit = millis();
     //first sealed-in shot is over. Check trigger *quickly* for downness, fire again and again while down.
-    while((PINB & 0b00001000) && !(PINB & 0b00010000)){
+    while(((PINB & 0b00001000) && !(PINB & 0b00010000)) || pusher_retracted()){
        // Just happily continue firing
       // Delay until the pusher has left the station
       // Also handle any pusher stalls;
@@ -299,6 +302,8 @@ void loop(){
         cycle_hit = millis();
       }
      }
+     delay(5);
+    while (pusher_retracted()) {};
     while(!pusher_retracted()) {
        // Delay until the pusher is settled.
       // Also handle any pusher stalls;
@@ -315,6 +320,12 @@ void loop(){
         cycle_hit = millis();
       }
     }
+    set_pusher(false);
+    delay(5);
+    while(!pusher_retracted()) {
+      set_pusher(true);
+    }
+    set_pusher(false);
     // And now stop the pusher.
     // And the flywheels
     set_pusher(false);
