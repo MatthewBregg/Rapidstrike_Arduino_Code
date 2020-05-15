@@ -145,7 +145,15 @@ float calculate_voltage() {
 
 
 BasicDebounce trigger = BasicDebounce(12, 5);
+// Cycle.query() is true when the pusher is retracted.
 BasicDebounce cycle = BasicDebounce(5, 0);
+// Use this switch to stop revving the flywheels when we are no longer firing and the pusher retracts.
+// Another option: When trigger is released, stop flywheels on retract, start on release (pusher overshoot).
+// The downside of this? There's the (small) risk of rapidly revving/unreving the flywheels while they are locked,
+// defeating even brushless motors robust stall protection.
+// I suppose this could be mitigated by putting a limit on how often we rev the flywheels but that creates complicated software fast.
+// Perhaps using this switch, but with just a 10ms debounce would be a good compromise?
+BasicDebounce cycle_debounced = BasicDebounce(5, 100);
 
 void setup() {
 
@@ -179,6 +187,7 @@ void setup() {
   digitalWrite(A3, LOW);
 
   cycle.AddSecondaryPin(4);
+  cycle_debounced.AddSecondaryPin(4);
   trigger.AddSecondaryPin(11);
   cycle.set_pressed_command(&pusher_retracted);
   cycle.set_released_command(&pusher_extended);
@@ -301,17 +310,28 @@ void loop() {
 
 
   if (trigger.query()) {
-    bool first = false;
-    if (!pushing) {
+
+    // Initialize pusher if we otherwise weren't pushing
+    // If we are already pushing, then this isn't our first time in this loop for this trigger down. 
+    bool first = !pushing;
+
+    // Rev flywheels and handle FD
+    if (first) {
       delay(100);
-      first = true;
     }
+
+    // Initialize the pusher.
     set_pusher(true);
+
+    // For the first cycle, make sure we fire one dart by waiting for the
+    // pusher to extend.
     while (first && cycle.query()) {
       upkeep();
     }
+    
+    // Give the pusher time to leave and prevent bouncing back before firing.
     if (first) {
-      delay(10); // Give the pusher time to leave and prevent bouncing back before firing.
+      delay(10); 
     }
   } else {
     set_pusher(cycle.query());
