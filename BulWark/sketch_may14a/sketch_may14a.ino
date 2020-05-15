@@ -8,7 +8,7 @@
 
  ////Project T19 and this Software (DZ Core) are released under the Creative Commons BY-NC 4.0 license.
  ////https://creativecommons.org/licenses/by-nc/4.0/
-
+#include <Button_Debounce.h>
 
  //state variables section
  bool prevTrigState = 0;
@@ -120,6 +120,8 @@ ISR(TIMER1_COMPA_vect) {
   //Do nothing. Don't mod anything because foreground code is probably loading variables right now.
 }
 
+BasicDebounce trigger = BasicDebounce(12, 5);
+BasicDebounce cycle = BasicDebounce(5,0);
 
 void setup(){
  
@@ -151,8 +153,17 @@ void setup(){
   // We use A3 as a gnd. 
   pinMode(A3, OUTPUT);
   digitalWrite(A3, LOW);
+
+  cycle.AddSecondaryPin(4);
+  trigger.AddSecondaryPin(11);
+
  //Serial.begin(9600);
  
+}
+
+void update_buttons() {
+  trigger.update();
+  cycle.update();
 }
 
 void first_run() {
@@ -228,6 +239,7 @@ float get_motor_speed_factor(float volts) {
 }
 bool pushing = false;
 const long pusher_timeout = 800;
+long pusher_millis = 0;
 void set_pusher(bool on) {
   if (on) {
     
@@ -238,6 +250,7 @@ void set_pusher(bool on) {
       delay(5);
     }
     pushing = true;
+    pusher_millis = millis();
     analogWrite(3,255.0*get_motor_speed_factor(10.5));
   } else {
     analogWrite(3,0);
@@ -248,7 +261,7 @@ void set_pusher(bool on) {
 
 
 bool pusher_retracted() {
-  return digitalRead(4) && !digitalRead(5);
+  return cycle.query();
 }
 
 void shutoff_flywheels() {
@@ -256,21 +269,16 @@ void shutoff_flywheels() {
     OCR1A = 230;
 }
 
-void wait_for_trigger_release() {
-  while((PINB & 0b00001000) && !(PINB & 0b00010000)){
-       // Just happily continue firing
-  }
-}
-
-
 void loop(){
+  // Switch to a don't block the loop approach, import my debounce library and let's do this correctly.
   if(firstRun) {
     first_run();
   }
-  
+
+  update_buttons();
   //initial debounce on trigger from idle state. Safety measure.
   prevTrigState = currTrigState;
-  currTrigState = (digitalRead(11) && !digitalRead(12));
+  currTrigState = (trigger.query());
   if(currTrigState && prevTrigState){
     bool first = false;
         if (!pushing) { delay(100); first = true; }
