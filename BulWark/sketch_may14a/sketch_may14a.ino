@@ -139,7 +139,7 @@ void setup(){
   OCR1B = 230; //write 920us low throttle
 
   // Set the pusher motor PWM frequency to be 31K
- // TCCR2B = (TCCR2B & B11111000) | B00000001; 
+  TCCR2B = (TCCR2B & B11111000) | B00000001; 
   
   //pin 3: Pusher Motor
   pinMode(3, OUTPUT);
@@ -170,6 +170,7 @@ float calculate_voltage() {
   if (vin<0.09) {
     vin=0.0;//statement to quash undesired reading !
   }
+   
   return vin;
   
 }
@@ -205,22 +206,15 @@ void InitFiring() {
 
 
 float get_motor_speed_factor() {
-  float value = 11.0/calculate_voltage();
+  float value = 12.0/calculate_voltage();
   if ( value < 1 ) {
     return value;
   }
   return 1;
   
 }
-float get_slow_motor_speed_factor() {
-  float value = 6.0/calculate_voltage();
-  if ( value < 1 ) {
-    return value;
-  }
-  return 1;
-  
-}
-const long pusher_timeout = 100;
+
+const long pusher_timeout = 800;
 void set_pusher(bool on) {
   if (on) {
     analogWrite(3,255.0*get_motor_speed_factor());
@@ -246,8 +240,6 @@ void wait_for_trigger_release() {
 }
 
 void loop(){
-
-
   if(firstRun) {
     ////continue startup
     selftest();
@@ -307,8 +299,6 @@ void loop(){
         cycle_hit = millis();
       }
      }
-     // Slow the pusher down for easier homing.
-    //analogWrite(3,255.0*get_slow_motor_speed_factor());
     while(!pusher_retracted()) {
        // Delay until the pusher is settled.
       // Also handle any pusher stalls;
