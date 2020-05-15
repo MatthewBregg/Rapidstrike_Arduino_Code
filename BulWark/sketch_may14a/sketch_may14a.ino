@@ -120,6 +120,28 @@ ISR(TIMER1_COMPA_vect) {
   //Do nothing. Don't mod anything because foreground code is probably loading variables right now.
 }
 
+
+float calculate_voltage() {
+  //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
+   constexpr double  R1 = 68200.0; // -see text!
+   constexpr double R2 =  9850.0; // -see text!
+   constexpr double multiplier = (R2/(R1+R2));
+   // Instead of dividing, 
+  // used a voltimeter to measure at the analog read point, 
+  // and then divided the actual bat voltage by the reading to get the multiplier,
+  // which is then hardcoded in.
+  float value = analogRead(A5);
+  float vout = (value * 5.0) / 1024.0; // see text
+  float vin = vout / multiplier; // 8.65;
+  if (vin<0.09) {
+    vin=0.0;//statement to quash undesired reading !
+  }
+   
+  return vin;
+  
+}
+
+
 BasicDebounce trigger = BasicDebounce(12, 5);
 BasicDebounce cycle = BasicDebounce(5,0);
 
@@ -156,6 +178,8 @@ void setup(){
 
   cycle.AddSecondaryPin(4);
   trigger.AddSecondaryPin(11);
+  cycle.set_pressed_command(&pusher_retracted);
+  cycle.set_released_command(&pusher_extended);
 
  //Serial.begin(9600);
  
@@ -178,27 +202,6 @@ void first_run() {
     //clear flag
     firstRun = false;
 }
-
-float calculate_voltage() {
-  //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
-   constexpr double  R1 = 68200.0; // -see text!
-   constexpr double R2 =  9850.0; // -see text!
-   constexpr double multiplier = (R2/(R1+R2));
-   // Instead of dividing, 
-  // used a voltimeter to measure at the analog read point, 
-  // and then divided the actual bat voltage by the reading to get the multiplier,
-  // which is then hardcoded in.
-  float value = analogRead(A5);
-  float vout = (value * 5.0) / 1024.0; // see text
-  float vin = vout / multiplier; // 8.65;
-  if (vin<0.09) {
-    vin=0.0;//statement to quash undesired reading !
-  }
-   
-  return vin;
-  
-}
-
 
 
 // In MS, when did we last stop the flywheels?
@@ -238,19 +241,29 @@ float get_motor_speed_factor(float volts) {
   
 }
 bool pushing = false;
-const long pusher_timeout = 800;
+const long pusher_timeout = 300;
+bool pusher_stalled = false;
 long pusher_millis = 0;
+
+void pusher_retracted(BasicDebounce* ) {
+  pusher_millis = millis();
+}
+
+void pusher_extended(BasicDebounce*) {
+  pusher_millis = millis();
+ 
+}
 void set_pusher(bool on) {
-  if (on) {
-    
+
+  if (on && !pusher_stalled) {
     if (!pushing) {
       // The relay is tied to the motor  mosfet
       // to save space, so ensure the relay can flip with this
       analogWrite(3,255.0);
       delay(5);
+      pusher_millis = millis();
     }
     pushing = true;
-    pusher_millis = millis();
     analogWrite(3,255.0*get_motor_speed_factor(10.5));
   } else {
     analogWrite(3,0);
@@ -258,39 +271,45 @@ void set_pusher(bool on) {
   }
 }
 
-
-
-bool pusher_retracted() {
-  return cycle.query();
+void handle_pusher_stalls() {
+  if ( pushing && ((millis() - pusher_millis) > pusher_timeout)) { 
+    // Stall!
+    pusher_stalled = true;
+    set_pusher(false);
+    shutoff_flywheels();
+  }
 }
+
 
 void shutoff_flywheels() {
     OCR1B = 230; //shutdown
     OCR1A = 230;
 }
-
+void upkeep() {
+  update_buttons();
+  handle_pusher_stalls();
+}
 void loop(){
   // Switch to a don't block the loop approach, import my debounce library and let's do this correctly.
   if(firstRun) {
     first_run();
   }
 
-  update_buttons();
-  //initial debounce on trigger from idle state. Safety measure.
-  prevTrigState = currTrigState;
-  currTrigState = (trigger.query());
-  if(currTrigState && prevTrigState){
+  upkeep();
+  
+
+  if(trigger.query()){
     bool first = false;
         if (!pushing) { delay(100); first = true; }
     set_pusher(true);
-    while(first && pusher_retracted()) {}
+    while(first && cycle.query()) { upkeep(); }
     if (first) {
       delay(10); // Give the pusher time to leave and prevent bouncing back before firing.
     }
     
  
 } else {
-  set_pusher(pusher_retracted());
+  set_pusher(cycle.query());
 }
 }
 
