@@ -302,8 +302,24 @@ void loop(){
         cycle_hit = millis();
       }
      }
-     delay(5);
-    while (pusher_retracted()) {};
+    // Debounce on cycle switch.
+    delay(5);
+    while (pusher_retracted()) {
+       // Delay until the pusher has left the station
+      // Also handle any pusher stalls;
+      if (pusher_retracted() == cycle_status && (millis()-cycle_hit)> pusher_timeout) {
+        // No change in pusher status for timeout, STALL. 
+        // Stop everything, pause for a second, 
+        // and then let the user reinitialize firing if desired.
+         set_pusher(false);
+         shutoff_flywheels();
+         wait_for_trigger_release();
+         return;
+      } else if ( cycle_status != pusher_retracted() ) {
+        cycle_status = pusher_retracted();
+        cycle_hit = millis();
+      }
+    };
     while(!pusher_retracted()) {
        // Delay until the pusher is settled.
       // Also handle any pusher stalls;
@@ -320,12 +336,41 @@ void loop(){
         cycle_hit = millis();
       }
     }
-    set_pusher(false);
-    delay(5);
-    while(!pusher_retracted()) {
-      set_pusher(true);
+    // More awful debouncing.
+    // We need to stop the pusher here if we are going to stop. 
+    // But if it's just debouncing weirdness, we don't want to stop!
+    // So start stopping, check for fake outs, then decide what to do. 
+    // do this in a loop until we are happy the pusher is actually stopped.
+
+    while(true) {
+      // Stop the pusher
+      set_pusher(false);
+      // Wait 5 mills
+      delay(5);
+      // Are we actually retracted? If so, break. 
+      if ( pusher_retracted() ) {
+        break;
+      }
+      // IF we overshot/just bounced, try again.
+      while(!pusher_retracted()) {
+        // Restart the pusher, we were fooled!
+        set_pusher(true);
+        // Also handle any pusher stalls;
+        if (pusher_retracted() == cycle_status && (millis()-cycle_hit)> pusher_timeout) {
+          // No change in pusher status for timeout, STALL. 
+          // Stop everything, pause for a second, 
+          // and then let the user reinitialize firing if desired.
+           set_pusher(false);
+           shutoff_flywheels();
+           wait_for_trigger_release();
+           return;
+        } else if ( cycle_status != pusher_retracted() ) {
+          cycle_status = pusher_retracted();
+          cycle_hit = millis();
+        }
+      }
+
     }
-    set_pusher(false);
     // And now stop the pusher.
     // And the flywheels
     set_pusher(false);
