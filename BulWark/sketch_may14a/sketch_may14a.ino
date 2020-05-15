@@ -187,8 +187,8 @@ void InitFiring() {
     const int FD_STAGE_3 = 250;
     const long millis_since_rev = millis() - last_turned_down_flywheels;
     // Rev
-   // OCR1B = 500; //go
-    //OCR1A = 500;
+    OCR1B = 500; //go
+    OCR1A = 500;
     // Delay
     if (millis_since_rev < FD_STAGE_1 ) {
       
@@ -205,8 +205,8 @@ void InitFiring() {
 }
 
 
-float get_motor_speed_factor() {
-  float value = 12.0/calculate_voltage();
+float get_motor_speed_factor(float volts) {
+  float value = volts/calculate_voltage();
   if ( value < 1 ) {
     return value;
   }
@@ -220,7 +220,18 @@ void set_pusher(bool on) {
     // If we want to try lower speeds, uncomment the below so the relay can flip.
     // analogWrite(3,255);
     //delay(20);
-    analogWrite(3,255.0*get_motor_speed_factor());
+    analogWrite(3,255.0*get_motor_speed_factor(12));
+  } else {
+    analogWrite(3,0);
+  }
+}
+
+void set_pusher_slow(bool on) {
+  if (on) {
+    // If we want to try lower speeds, uncomment the below so the relay can flip.
+    // analogWrite(3,255);
+    //delay(20);
+    analogWrite(3,255.0*get_motor_speed_factor(12));
   } else {
     analogWrite(3,0);
   }
@@ -284,6 +295,7 @@ void loop(){
     }
     cycle_status = pusher_retracted();
     cycle_hit = millis();
+    set_pusher_slow(true);
     //first sealed-in shot is over. Check trigger *quickly* for downness, fire again and again while down.
     while(((PINB & 0b00001000) && !(PINB & 0b00010000)) || pusher_retracted()){
        // Just happily continue firing
@@ -354,7 +366,7 @@ void loop(){
       // IF we overshot/just bounced, try again.
       while(!pusher_retracted()) {
         // Restart the pusher, we were fooled!
-        set_pusher(true);
+       set_pusher_slow(true);
         // Also handle any pusher stalls;
         if (pusher_retracted() == cycle_status && (millis()-cycle_hit)> pusher_timeout) {
           // No change in pusher status for timeout, STALL. 
