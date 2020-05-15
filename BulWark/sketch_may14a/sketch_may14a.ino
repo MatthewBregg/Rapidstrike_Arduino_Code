@@ -155,6 +155,19 @@ void setup(){
  
 }
 
+void first_run() {
+    ////continue startup
+    selftest();
+    // Set the Flywheel Governor to RPM. 
+    for ( int i = 0; i != 10; ++i ) {
+      // Set the speed 10 times for paranoia reasons!
+      updateSpeedFixed(37000);
+    }
+
+    //clear flag
+    firstRun = false;
+}
+
 float calculate_voltage() {
   //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
    constexpr double  R1 = 68200.0; // -see text!
@@ -217,29 +230,21 @@ bool pushing = false;
 const long pusher_timeout = 800;
 void set_pusher(bool on) {
   if (on) {
-    // If we want to try lower speeds, uncomment the below so the relay can flip.
-    // analogWrite(3,255);
-    //delay(20);
+    
+    if (!pushing) {
+      // The relay is tied to the motor  mosfet
+      // to save space, so ensure the relay can flip with this
+      analogWrite(3,255.0);
+      delay(5);
+    }
     pushing = true;
-    analogWrite(3,255.0*get_motor_speed_factor(11));
+    analogWrite(3,255.0*get_motor_speed_factor(10.5));
   } else {
     analogWrite(3,0);
     pushing = false;
   }
 }
 
-void set_pusher_slow(bool on) {
-  if (on) {
-    // If we want to try lower speeds, uncomment the below so the relay can flip.
-    // analogWrite(3,255);
-    //delay(20);
-    pushing = true;
-    analogWrite(3,255.0*get_motor_speed_factor(12));
-  } else {
-    pushing = false;
-    analogWrite(3,0);
-  }
-}
 
 
 bool pusher_retracted() {
@@ -257,18 +262,10 @@ void wait_for_trigger_release() {
   }
 }
 
+
 void loop(){
   if(firstRun) {
-    ////continue startup
-    selftest();
-    // Set the Flywheel Governor to RPM. 
-    for ( int i = 0; i != 10; ++i ) {
-      // Set the speed 10 times for paranoia reasons!
-      updateSpeedFixed(37000);
-    }
-
-    //clear flag
-    firstRun = 0;
+    first_run();
   }
   
   //initial debounce on trigger from idle state. Safety measure.
