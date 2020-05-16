@@ -338,7 +338,7 @@ void InitFiring() {
     // Delay
     if (millis_since_rev < FD_STAGE_2  ) {
      
-      // No delay! ; // FD_STAGE_2 delay, revved within FD_STAGE_2 MS 
+      delay(15); // FD_STAGE_2 delay, revved within FD_STAGE_2 MS 
      
     } else if (millis_since_rev < FD_STAGE_1 ) {
           
