@@ -122,7 +122,7 @@ ISR(TIMER1_COMPA_vect) {
   //Do nothing. Don't mod anything because foreground code is probably loading variables right now.
 }
 
-
+float voltage = 0.0;
 float calculate_voltage() {
   //http://www.electroschematics.com/9351/arduino-digital-voltmeter/
   constexpr double  R1 = 68200.0; // -see text!
@@ -146,14 +146,14 @@ float calculate_voltage() {
 
 BasicDebounce trigger = BasicDebounce(12, 5);
 // Cycle.query() is true when the pusher is retracted.
-BasicDebounce cycle = BasicDebounce(5, 0);
+BasicDebounce cycle = BasicDebounce(4, 3);
 // Use this switch to stop revving the flywheels when we are no longer firing and the pusher retracts.
 // Another option: When trigger is released, stop flywheels on retract, start on release (pusher overshoot).
 // The downside of this? There's the (small) risk of rapidly revving/unreving the flywheels while they are locked,
 // defeating even brushless motors robust stall protection.
 // I suppose this could be mitigated by putting a limit on how often we rev the flywheels but that creates complicated software fast.
 // Perhaps using this switch, but with just a 10ms debounce would be a good compromise?
-BasicDebounce cycle_debounced = BasicDebounce(5, 100);
+BasicDebounce cycle_debounced = BasicDebounce(4, 10);
 
 void setup() {
 
@@ -166,17 +166,22 @@ void setup() {
   //pin 9/10 flywheel motor controller PWM throttle signal
   pinMode(9, OUTPUT);
   pinMode(10, OUTPUT);
+  //pin 3: Pusher Motor PWM
+  pinMode(3, OUTPUT);
+  analogWrite(3, 255.0 * .70);
   //fast PWM prescaler 64 (250kHz)
   TCCR1A = _BV(COM1A1) | _BV(COM1B1) | _BV(WGM11);
   TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS11) | _BV(CS10);
   ICR1 = 624; //400Hz
   OCR1B = 230; //write 920us low throttle
 
-  // Set the pusher motor PWM frequency to be 31K
-  TCCR2B = (TCCR2B & B11111000) | B00000001;
+  // Set the pusher motor PWM frequency to be 3.9K
+  // http://ceezblog.info/2018/07/10/arduino-timer-pwm-cheat-sheet/
+  TCCR2B = (TCCR2B & B11111000) | B00000010;
 
-  //pin 3: Pusher Motor
-  pinMode(3, OUTPUT);
+
+  // pin 4: RElay
+  pinMode(6, OUTPUT);
   //pin 4/5: bolt limit switch (pullup)
   pinMode(4, INPUT_PULLUP);
   pinMode(5, INPUT_PULLUP);
@@ -185,20 +190,27 @@ void setup() {
   // We use A3 as a gnd.
   pinMode(A3, OUTPUT);
   digitalWrite(A3, LOW);
+  // We use 8 as VCC
+  pinMode(8, OUTPUT);
+  digitalWrite(8,HIGH);
 
-  cycle.AddSecondaryPin(4);
-  cycle_debounced.AddSecondaryPin(4);
+
+  cycle.AddSecondaryPin(5);
+  cycle_debounced.AddSecondaryPin(5);
   trigger.AddSecondaryPin(11);
   cycle.set_pressed_command(&pusher_retracted);
   cycle.set_released_command(&pusher_extended);
 
-  //Serial.begin(9600);
+  Serial.begin(9600);
+  Serial.println("Voltage");
+  Serial.println(calculate_voltage());
 
 }
 
 void update_buttons() {
   trigger.update();
   cycle.update();
+  cycle_debounced.update();
 }
 
 void first_run() {
@@ -207,7 +219,7 @@ void first_run() {
   // Set the Flywheel Governor to RPM.
   for ( int i = 0; i != 10; ++i ) {
     // Set the speed 10 times for paranoia reasons!
-    updateSpeedFixed(37000);
+    updateSpeedFixed(20000);
   }
 
   //clear flag
@@ -215,36 +227,9 @@ void first_run() {
 }
 
 
-// In MS, when did we last stop the flywheels?
-long last_turned_down_flywheels = 0;
-
-// Rev the flywheels, handle the FD, and then start the pusher.
-void InitFiring() {
-  const int FD_STAGE_1 = 1000;
-  const int FD_STAGE_2 = 500;
-  const int FD_STAGE_3 = 250;
-  const long millis_since_rev = millis() - last_turned_down_flywheels;
-  // Rev
-  //OCR1B = 500; //go
-  //OCR1A = 500;
-  // Delay
-  if (millis_since_rev < FD_STAGE_1 ) {
-
-    delay(85); // FD_STAGE_1 delay, revved within FD_STAGE_1 ms
-  } else if (millis_since_rev < FD_STAGE_2) {
-
-    delay(75); // FD_STAGE_2 delay, revved within FD_STAGE_2 MS
-  } else if (millis_since_rev < FD_STAGE_3) {
-
-    delay(65); // FD_STAGE_3 delay, revved within FD_STAGE_3 MS.
-  } else {
-    delay(105); // Full Feed Delay. Have not revved recently.
-  }
-}
-
 
 float get_motor_speed_factor(float volts) {
-  float value = volts / calculate_voltage();
+  float value = volts / voltage;
   if ( value < 1 ) {
     return value;
   }
@@ -268,21 +253,20 @@ void set_pusher(bool on) {
 
   if (on && !pusher_stalled) {
     if (!pushing) {
-      // The relay is tied to the motor  mosfet
-      // to save space, so ensure the relay can flip with this
-      analogWrite(3, 255.0);
-      delay(5);
       pusher_millis = millis();
     }
     pushing = true;
-    analogWrite(3, 255.0 * get_motor_speed_factor(10.5));
+    digitalWrite(6,HIGH);
+   // analogWrite(3, 255.0 * .70);
+    //analogWrite(3, 255.0 * .65);
   } else {
-    analogWrite(3, 0);
+    digitalWrite(6,LOW);
     pushing = false;
   }
 }
 
 void handle_pusher_stalls() {
+  return;
   if ( pushing && ((millis() - pusher_millis) > pusher_timeout)) {
     // Stall!
     pusher_stalled = true;
@@ -296,28 +280,43 @@ void shutoff_flywheels() {
   OCR1B = 230; //shutdown
   OCR1A = 230;
 }
+void rev_flywheels() {
+  OCR1B = 500; //go
+  OCR1A = 500;
+}
 void upkeep() {
   update_buttons();
   handle_pusher_stalls();
+}
+void delay_and_upkeep(int delay) {
+  int init = millis();
+  while((millis() - init) < delay) {
+    upkeep();
+  }
+
 }
 void loop() {
   // Switch to a don't block the loop approach, import my debounce library and let's do this correctly.
   if (firstRun) {
     first_run();
+    voltage = calculate_voltage();
   }
 
   upkeep();
 
+ 
 
   if (trigger.query()) {
 
     // Initialize pusher if we otherwise weren't pushing
     // If we are already pushing, then this isn't our first time in this loop for this trigger down. 
     bool first = !pushing;
-
+ 
     // Rev flywheels and handle FD
     if (first) {
-      delay(100);
+      pusher_stalled = false;
+      rev_flywheels();
+      delay(200);
     }
 
     // Initialize the pusher.
@@ -325,16 +324,18 @@ void loop() {
 
     // For the first cycle, make sure we fire one dart by waiting for the
     // pusher to extend.
-    while (first && cycle.query()) {
+    while (first && cycle_debounced.query()) {
       upkeep();
     }
     
-    // Give the pusher time to leave and prevent bouncing back before firing.
-    if (first) {
-      delay(10); 
-    }
   } else {
-    set_pusher(cycle.query());
+    if ( cycle.query() ) {
+     // set_pusher(false);
+    }
+    set_pusher(!cycle.query());
+    if (cycle_debounced.query()) {
+      shutoff_flywheels();
+    }
   }
 }
 
