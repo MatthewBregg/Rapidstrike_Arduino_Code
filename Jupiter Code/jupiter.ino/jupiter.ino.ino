@@ -29,7 +29,9 @@ void UpdateButtons() {
 // In MS, when did we last stop the flywheels?
 long last_turned_down_flywheels = 0;
 
+
 // Rev the flywheels, handle the FD, and then start the pusher.
+// THIS IS BUGGED: This if statement will only ever do FD_STAGE_1 or the else!!
 void InitFiring() {
     const int FD_STAGE_1 = 1000;
     const int FD_STAGE_2 = 500;

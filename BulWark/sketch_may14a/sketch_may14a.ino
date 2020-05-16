@@ -145,7 +145,7 @@ float calculate_voltage() {
 
 
 float get_motor_speed_factor(float volts) {
-  float value = volts /((calculate_voltage()+calculate_voltage())/2.0);
+  float value = volts / ((calculate_voltage() + calculate_voltage()) / 2.0);
   if ( value < 1 ) {
     return value;
   }
@@ -178,7 +178,7 @@ void setup() {
   pinMode(10, OUTPUT);
   //pin 3: Pusher Motor PWM
   pinMode(3, OUTPUT);
-  // Set the pusher motor to maintain roughly 12 volts. 
+  // Set the pusher motor to maintain roughly 12 volts.
   analogWrite(3, 255.0 * get_motor_speed_factor(12));
   //fast PWM prescaler 64 (250kHz)
   TCCR1A = _BV(COM1A1) | _BV(COM1B1) | _BV(WGM11);
@@ -203,7 +203,7 @@ void setup() {
   digitalWrite(A3, LOW);
   // We use 8 as VCC
   pinMode(8, OUTPUT);
-  digitalWrite(8,HIGH);
+  digitalWrite(8, HIGH);
 
 
   cycle.AddSecondaryPin(5);
@@ -257,11 +257,11 @@ void set_pusher(bool on) {
       pusher_millis = millis();
     }
     pushing = true;
-    digitalWrite(6,HIGH);
-   // analogWrite(3, 255.0 * .70);
+    digitalWrite(6, HIGH);
+    // analogWrite(3, 255.0 * .70);
     //analogWrite(3, 255.0 * .65);
   } else {
-    digitalWrite(6,LOW);
+    digitalWrite(6, LOW);
     pushing = false;
   }
 }
@@ -274,13 +274,18 @@ void handle_pusher_stalls() {
     shutoff_flywheels();
   }
 }
-
-
+bool revving = false;
+long last_turned_down_flywheels = 0;
 void shutoff_flywheels() {
+  if (revving) {
+    last_turned_down_flywheels = millis();
+  }
+  revving = false;
   OCR1B = 230; //shutdown
   OCR1A = 230;
 }
 void rev_flywheels() {
+  revving = true;
   OCR1B = 500; //go
   OCR1A = 500;
 }
@@ -290,10 +295,58 @@ void upkeep() {
 }
 void delay_and_upkeep(int delay) {
   int init = millis();
-  while((millis() - init) < delay) {
+  while ((millis() - init) < delay) {
     upkeep();
   }
 
+}
+
+// Rev the flywheels, handle the FD
+void InitFiring() {
+    const int FD_STAGE_1 = 3000;
+    const int FD_STAGE_2 = 1000;
+    const long millis_since_rev = millis() - last_turned_down_flywheels;
+    // Meh though it may be, looks like we are starting with just 118 FPS...
+    // Rev
+    // 105 FD = GOOD!
+    // 50: Some bad shots but actually seems good overall?!
+    // Lets go with 65 to be sure?
+    // 20: Confirmed too low. 
+    // So somewhere between 20-50, I could spend ages microoptimizing over 30 MS, likely somewhere in 15 MS saved, or I could call it a day + play it safe at 65.
+    // 50 Already gave me 1 or 2 lowish readings, so I think 65 is p good.
+    // Final FD: 65!!
+    // Onto stage 2!
+    // Within 2k seconds 30 MS rev gives a binary distribution of 127/108?! Unknown.... Average before was 105. Let's try cranking it up a bit?
+    // Tried 2k delay and 60 MS rev, same results, I'm calling it good.
+    // 3K/30 ms rev confirmed good. The wheels stop at 4 seconds in.
+    // I could from here either: Decrease the rev time, or go all the way out to 4 seconds, but honestly? I'm good. Let's move on. 
+    // Plus, we don't want to live on the bleeding edge here, this blaster has enough moving parts, complexity, and finicky bits. 
+    // Stage 1.5: Can we get away with 0 rev at 1 S?
+    // Yup. That's our FD!
+
+    /* 
+    rev_flywheels();
+    delay(500); // Fully rev
+    shutoff_flywheels(); // Cool off
+    delay(1000);
+    rev_flywheels();
+     // No re-rev!!
+    return;
+    */
+
+    rev_flywheels();
+    // Delay
+    if (millis_since_rev < FD_STAGE_2  ) {
+     
+      // No delay! ; // FD_STAGE_2 delay, revved within FD_STAGE_2 MS 
+     
+    } else if (millis_since_rev < FD_STAGE_1 ) {
+          
+            delay(30); // FD_STAGE_1 delay, revved within FD_STAGE_1 ms
+    } else {
+           
+      delay(65); // Full Feed Delay. Have not revved recently. 
+    }
 }
 void loop() {
   // Switch to a don't block the loop approach, import my debounce library and let's do this correctly.
@@ -303,19 +356,18 @@ void loop() {
 
   upkeep();
 
- 
+
 
   if (trigger.query()) {
 
     // Initialize pusher if we otherwise weren't pushing
-    // If we are already pushing, then this isn't our first time in this loop for this trigger down. 
+    // If we are already pushing, then this isn't our first time in this loop for this trigger down.
     bool first = !pushing;
- 
+
     // Rev flywheels and handle FD
     if (first) {
       pusher_stalled = false;
-      rev_flywheels();
-      delay(200);
+      InitFiring();
     }
 
     // Initialize the pusher.
@@ -326,12 +378,12 @@ void loop() {
     while (first && cycle_debounced.query()) {
       upkeep();
     }
-    
+
   } else {
     if ( cycle.query() ) {
-     set_pusher(false);
+      set_pusher(false);
     }
-   // set_pusher(!cycle.query());
+    // set_pusher(!cycle.query());
     if (cycle_debounced.query()) {
       shutoff_flywheels();
     }
