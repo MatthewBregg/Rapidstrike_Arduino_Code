@@ -302,6 +302,7 @@ void delay_and_upkeep(int delay) {
 }
 
 // Rev the flywheels, handle the FD
+// Motors in this blster: EMAX RS1408-3600KV
 void InitFiring() {
     const int FD_STAGE_1 = 3000;
     const int FD_STAGE_2 = 1000;
